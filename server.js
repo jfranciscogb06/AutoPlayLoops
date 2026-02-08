@@ -11,7 +11,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2024-11-20.acacia' });
+const stripeKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: '2024-11-20.acacia' }) : null;
 
 const PRICE_ID = process.env.STRIPE_PRICE_ID || '';
 const TRIAL_DAYS = 7;
@@ -39,6 +40,7 @@ app.use('/api', (req, res, next) => {
 // Webhook MUST use raw body for Stripe signature - define before json parser
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   try {
+    if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
     const sig = req.headers['stripe-signature'];
     if (!sig || !WEBHOOK_SECRET) {
       return res.status(400).json({ error: 'Missing signature or webhook secret' });
@@ -99,6 +101,7 @@ app.post('/api/auth', async (req, res) => {
     }
     const { email } = await verifyGoogleToken(token);
 
+    if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
     let customer = (await stripe.customers.list({ email, limit: 1 })).data[0];
     if (!customer) customer = await stripe.customers.create({ email });
 
@@ -129,7 +132,8 @@ app.post('/api/auth', async (req, res) => {
 app.use(express.static(path.join(__dirname, 'website')));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`LoopMail server running on port ${PORT}`);
+const HOST = '0.0.0.0';
+app.listen(PORT, HOST, () => {
+  console.log(`LoopMail server running on ${HOST}:${PORT}`);
   console.log(`Base URL: ${getBaseUrl()}`);
 });
