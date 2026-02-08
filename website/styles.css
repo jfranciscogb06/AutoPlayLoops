@@ -1,0 +1,244 @@
+:root {
+  --bg: #0c0c0c;
+  --bg-elevated: #141414;
+  --text: #e8e8e8;
+  --text-muted: #888;
+  --accent: #e8a838;
+  --accent-hover: #f0b84d;
+  --border: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background:
+    radial-gradient(ellipse 80% 50% at 70% 10%, rgba(232, 168, 56, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 20% 90%, rgba(232, 168, 56, 0.03) 0%, transparent 50%),
+    linear-gradient(180deg, #0a0a0a 0%, #0c0c0c 50%, #080808 100%);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 16px 24px;
+  background: rgba(12, 12, 12, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.logo-text {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.cta-header {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.cta-header:hover {
+  background: var(--accent-hover);
+}
+
+/* Hero */
+.hero {
+  padding: 140px 24px 80px;
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.hero-title {
+  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+
+.hero-subtitle {
+  font-size: 1.125rem;
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.65;
+}
+
+.cta-primary {
+  display: inline-block;
+  padding: 14px 28px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.cta-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.demo-label {
+  margin: 32px 0 12px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.demo-bar-wrapper {
+  margin: 0 0 24px;
+  max-width: 600px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-note {
+  margin-top: 16px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Features */
+.features {
+  padding: 80px 24px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.section-subtitle {
+  color: var(--text-muted);
+  margin-bottom: 40px;
+}
+
+.feature-list {
+  list-style: none;
+}
+
+.feature {
+  display: flex;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.feature:last-of-type {
+  border-bottom: none;
+}
+
+.feature-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.feature div {
+  flex: 1;
+}
+
+.feature strong {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.formats {
+  margin-top: 32px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* CTA section */
+.cta-section {
+  padding: 80px 24px;
+  text-align: center;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
+
+.cta-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cta-pricing {
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.cta-secondary {
+  display: inline-block;
+  padding: 12px 24px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.cta-secondary:hover {
+  background: var(--accent-hover);
+}
+
+/* Footer */
+.footer {
+  padding: 24px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}

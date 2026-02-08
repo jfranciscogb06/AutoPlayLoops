@@ -1,0 +1,81 @@
+/* LoopMail popup - matches website theme (dark, amber accents) */
+:root {
+  --bg: #0c0c0c;
+  --bg-elevated: #141414;
+  --text: #e8e8e8;
+  --text-muted: #888;
+  --accent: #e8a838;
+  --accent-hover: #f0b84d;
+  --border: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  min-width: 280px;
+}
+
+.container {
+  padding: 16px;
+}
+
+.duration-setting {
+  margin-bottom: 16px;
+}
+
+.duration-setting label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.duration-setting select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.duration-setting select:hover {
+  border-color: var(--accent);
+}
+
+.duration-setting select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.link:hover {
+  color: var(--accent-hover);
+}
+
+.link:visited {
+  color: var(--accent);
+}

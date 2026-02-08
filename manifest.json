@@ -1,0 +1,79 @@
+{
+  "manifest_version": 3,
+  "name": "LoopMail",
+  "version": "1.0.0",
+  "description": "Play audio loops from your Gmail inbox - 10 seconds each, perfect for music producers",
+  "permissions": [
+    "identity",
+    "storage",
+    "offscreen",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://gmail.googleapis.com/*",
+    "https://oauth2.googleapis.com/*",
+    "https://mail.google.com/*",
+    "https://autoplayloops.onrender.com/*"
+  ],
+  "oauth2": {
+    "client_id": "293425920424-b4ufdr9gdf78mj6pkpt9rt2njjf5gu2t.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "LoopMail",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "auth/auth.html",
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "prev-loop": {
+      "suggested_key": {
+        "default": "Alt+Left",
+        "mac": "Alt+Left"
+      },
+      "description": "Previous loop"
+    },
+    "next-loop": {
+      "suggested_key": {
+        "default": "Alt+Right",
+        "mac": "Alt+Right"
+      },
+      "description": "Next loop"
+    },
+    "toggle-play-pause": {
+      "suggested_key": {
+        "default": "Alt+Space",
+        "mac": "Alt+Space"
+      },
+      "description": "Pause or resume"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ]
+}

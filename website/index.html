@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Preview audio loops from your Gmail inbox. LoopMail plays 10-second snippets of every attachment—perfect for music producers.">
+  <title>LoopMail — Preview audio loops in Gmail</title>
+  <link rel="icon" type="image/png" href="assets/icon128.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="demo-bar.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <img src="assets/icon128.png" alt="" class="logo-icon">
+        <span class="logo-text">LoopMail</span>
+      </div>
+      <a href="https://chromewebstore.google.com/" class="cta-header" target="_blank" rel="noopener">Add to Chrome</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1 class="hero-title">Preview audio loops<br>without leaving Gmail</h1>
+      <p class="demo-label">Try it — same bar as in Gmail:</p>
+      <div class="demo-bar-wrapper">
+        <div class="apl-root apl-tab apl-demo-tab" id="demoBar">
+          <button class="apl-bar-btn apl-bar-prev" id="demoPrev" title="Previous">◀</button>
+          <button class="apl-bar-btn apl-bar-play" id="demoPlay" title="Play">▶</button>
+          <button class="apl-bar-btn apl-bar-next" id="demoNext" title="Next">▶</button>
+          <span class="apl-bar-label" id="demoLabel"><span class="apl-bar-label-inner">here is where your sample would be</span></span>
+          <button class="apl-bar-btn apl-bar-shuffle" id="demoShuffle" title="Shuffle"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+          <a class="apl-bar-btn apl-bar-download" id="demoDownload" href="https://chromewebstore.google.com/" target="_blank" rel="noopener" title="Get LoopMail"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
+        </div>
+      </div>
+      <a href="https://chromewebstore.google.com/" class="cta-primary" target="_blank" rel="noopener">Install for Chrome</a>
+      <p class="hero-note">Free for 1 week, then $1.99/month</p>
+    </section>
+
+    <section class="features">
+      <h2 class="section-title">Built for music producers</h2>
+      <p class="section-subtitle">Receive loops via email? Stop opening every message. LoopMail pulls audio attachments from your inbox and plays them back-to-back.</p>
+      <ul class="feature-list">
+        <li class="feature">
+          <span class="feature-icon">▶</span>
+          <div>
+            <strong>10-second previews</strong> — Hear the first 10 seconds of each file, then auto-advance. Duration customizable in settings.
+          </div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon">⇅</span>
+          <div>
+            <strong>Shuffle & search</strong> — Shuffle your queue or filter by Gmail search
+          </div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon">⬇</span>
+          <div>
+            <strong>One-click download</strong> — Save loops you like instantly
+          </div>
+        </li>
+        <li class="feature">
+          <span class="feature-icon">⌘</span>
+          <div>
+            <strong>Keyboard shortcuts</strong> — Alt+Left / Alt+Right to skip, Alt+Space to pause/resume
+          </div>
+        </li>
+      </ul>
+      <p class="formats">MP3, WAV, AIFF, FLAC, OGG, WebM</p>
+    </section>
+
+    <section class="cta-section">
+      <h2 class="cta-title">Start previewing in seconds</h2>
+      <p class="cta-pricing">Free for 1 week, then $1.99/month</p>
+      <a href="https://chromewebstore.google.com/" class="cta-secondary" target="_blank" rel="noopener">Get LoopMail</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>LoopMail — Chrome extension for Gmail</p>
+  </footer>
+  <script src="demo.js"></script>
+</body>
+</html>

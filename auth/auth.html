@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LoopMail - Sign in</title>
+  <style>
+    :root {
+      --bg: #0c0c0c;
+      --bg-elevated: #141414;
+      --text: #e8e8e8;
+      --text-muted: #888;
+      --accent: #e8a838;
+      --accent-hover: #f0b84d;
+      --border: #2a2a2a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .card {
+      background: var(--bg-elevated);
+      padding: 32px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      max-width: 360px;
+      width: 100%;
+    }
+    h1 { font-size: 20px; margin: 0 0 24px; font-weight: 600; text-align: center; }
+    .btn {
+      width: 100%;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .status { margin: 16px 0; font-weight: 500; font-size: 14px; text-align: center; min-height: 20px; }
+    .status.signing-in { color: var(--accent); }
+    .status.success { color: #5cb85c; }
+    .status.error { color: #e74c3c; }
+    .hint { font-size: 12px; color: var(--text-muted); margin-top: 16px; text-align: center; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>LoopMail</h1>
+    <div class="status" id="status"></div>
+    <button class="btn" id="signInBtn">Sign in with Google</button>
+    <p class="hint">A Google sign-in window will open (check for popups or another tab). After you sign in, you'll go to Stripe to add your payment method. First load may take 30–60 seconds.</p>
+  </div>
+  <script src="../lib/config.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>

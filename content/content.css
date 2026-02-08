@@ -1,0 +1,447 @@
+/* LoopMail - Gmail-integrated player - matches Gmail theme */
+.apl-root {
+  font-family: 'Google Sans', Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #202124;
+  -webkit-font-smoothing: antialiased;
+}
+
+.apl-bar-signed-out,
+.apl-bar-signed-in {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.apl-bar-signin-text {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.apl-bar-signin {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+}
+
+.apl-bar-signin:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.apl-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 48px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  transition: background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  contain: layout size;
+}
+
+.apl-bar-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+}
+
+.apl-bar-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 0 0 0 24px;
+  transition: width 0.05s linear;
+}
+
+.apl-tab:hover {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+
+.apl-tab svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: rgba(255, 255, 255, 0.9);
+}
+
+.apl-bar-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  padding: 2px 2px;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.apl-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.apl-bar-prev {
+  margin-right: -4px;
+}
+
+.apl-bar-play {
+  font-size: 14px;
+  padding: 2px 4px;
+  margin-right: -4px;
+  min-width: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
+}
+
+.apl-bar-play.playing {
+  font-size: 24px;
+}
+
+.apl-bar-next {
+  margin-right: -4px;
+}
+
+.apl-bar-label {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.apl-bar-label-inner {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.apl-bar-shuffle {
+  padding: 4px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: -14px;
+}
+
+.apl-bar-shuffle .apl-bar-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: rgba(255, 255, 255, 0.4);
+}
+
+.apl-bar-shuffle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.apl-bar-shuffle:hover .apl-bar-icon {
+  fill: rgba(255, 255, 255, 0.7);
+}
+
+.apl-bar-shuffle.active {
+  color: #fff;
+}
+
+.apl-bar-shuffle.active .apl-bar-icon {
+  fill: #fff;
+}
+
+.apl-bar-download {
+  padding: 4px;
+  margin-left: -6px;
+}
+
+.apl-bar-download .apl-bar-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.apl-bar-hide {
+  padding: 2px 6px;
+  margin-left: 2px;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.apl-bar-hide:hover {
+  opacity: 1;
+}
+
+.apl-show-btn {
+  height: 48px;
+  padding: 0 14px;
+  font-family: 'Google Sans', Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: background 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.apl-show-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.apl-panel {
+  position: fixed;
+  top: 56px;
+  right: 24px;
+  width: 360px;
+  max-width: calc(100vw - 48px);
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px rgba(60, 64, 67, 0.15);
+  z-index: 10000;
+  overflow: hidden;
+}
+
+.apl-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8eaed;
+  background: #fff;
+}
+
+.apl-panel-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.apl-panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #5f6368;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.apl-panel-close:hover {
+  background: #f1f3f4;
+  color: #202124;
+}
+
+.apl-panel-body {
+  padding: 16px;
+}
+
+.apl-loop-name {
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #202124;
+  cursor: pointer;
+}
+
+.apl-progress-bar {
+  height: 4px;
+  background: #e8eaed;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.apl-progress-fill {
+  height: 100%;
+  background: #1a73e8;
+  border-radius: 2px;
+  transition: width 0.2s linear;
+}
+
+.apl-progress-text {
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 12px;
+}
+
+.apl-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.apl-btn {
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f3f4;
+  color: #5f6368;
+  transition: background 0.15s, color 0.15s;
+}
+
+.apl-btn:hover {
+  background: #e8eaed;
+  color: #202124;
+}
+
+.apl-btn-prev, .apl-btn-next {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+.apl-btn-play {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  background: #1a73e8;
+  color: #fff;
+}
+
+.apl-btn-play:hover {
+  background: #1557b0;
+}
+
+.apl-btn-play.playing {
+  background: #ea4335;
+}
+
+.apl-btn-play.playing:hover {
+  background: #c5221f;
+}
+
+.apl-btn-shuffle {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+}
+
+.apl-btn-shuffle.active {
+  color: #1a73e8;
+}
+
+.apl-download-row {
+  margin-bottom: 8px;
+}
+
+.apl-btn-download {
+  padding: 6px 12px;
+  border: none;
+  background: #f1f3f4;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #202124;
+  font-size: 13px;
+}
+
+.apl-btn-download:hover {
+  background: #e8eaed;
+}
+
+.apl-queue-info {
+  font-size: 12px;
+  color: #5f6368;
+  text-align: center;
+}
+
+.apl-auth, .apl-empty {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.apl-auth p, .apl-empty p {
+  margin: 0 0 12px;
+  color: #5f6368;
+}
+
+.apl-btn-signin {
+  padding: 10px 24px;
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.apl-btn-signin:hover {
+  background: #1557b0;
+}
+
+.apl-settings-link {
+  font-size: 12px;
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.apl-settings-link:hover {
+  text-decoration: underline;
+}
+
+.apl-signout {
+  font-size: 12px;
+  color: #1a73e8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.apl-signout:hover {
+  text-decoration: underline;
+}
