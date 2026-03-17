@@ -1,28 +1,25 @@
 /**
  * LoopMail - Popup UI
- * Preview duration + account actions (sign in or manage)
+ * Preview duration + Manage accounts
  */
 
-const accountActions = document.getElementById('accountActions');
-const manageActions = document.getElementById('manageActions');
-const signInLink = document.getElementById('signInLink');
-const manageAccountLink = document.getElementById('manageAccountLink');
+const signedInAs = document.getElementById('signedInAs');
 
-function updateUI(state) {
-  const hasToken = state?.hasToken ?? false;
-
-  if (hasToken) {
-    accountActions.style.display = 'none';
-    manageActions.style.display = 'flex';
-  } else {
-    accountActions.style.display = 'flex';
-    manageActions.style.display = 'none';
-  }
-}
-
-async function getState() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'GET_STATE' }, resolve);
+function updateSignedInDisplay() {
+  chrome.runtime.sendMessage({ type: 'GET_STATE' }, (state) => {
+    if (state?.hasToken) {
+      chrome.runtime.sendMessage({ type: 'GET_USER_EMAIL' }, (res) => {
+        const gmail = res?.gmailEmail || res?.loopmailEmail;
+        if (gmail) {
+          signedInAs.textContent = 'Gmail: ' + gmail;
+          signedInAs.style.display = 'block';
+        } else {
+          signedInAs.style.display = 'none';
+        }
+      });
+    } else {
+      signedInAs.style.display = 'none';
+    }
   });
 }
 
@@ -36,20 +33,13 @@ document.getElementById('durationSelect')?.addEventListener('change', (e) => {
   chrome.storage.local.set({ playDuration: seconds });
 });
 
-signInLink.addEventListener('click', (e) => {
+document.getElementById('manageAccountsLink')?.addEventListener('click', (e) => {
   e.preventDefault();
-  chrome.tabs.create({ url: chrome.runtime.getURL('auth/auth.html') });
-});
-
-manageAccountLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  chrome.tabs.create({ url: chrome.runtime.getURL('auth/auth.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('manage/manage.html') });
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'STATE_UPDATE') {
-    updateUI(msg.payload);
-  }
+  if (msg.type === 'STATE_UPDATE') updateSignedInDisplay();
 });
 
-getState().then(updateUI);
+updateSignedInDisplay();

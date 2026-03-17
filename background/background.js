@@ -26,8 +26,12 @@ function getTabState(tabId) {
 }
 
 const tabStateMap = new Map();
+let loadQueueGeneration = 0;
+const STORAGE_LOOPMAIL_TOKEN = 'loopmail_access_token';
+const STORAGE_GMAIL_TOKEN = 'gmail_access_token';
 let globalState = {
   accessToken: null,
+  gmailAccessToken: null,
   subscriptionActive: false,
   playbackStartTime: null,
   pausedElapsedSeconds: null,
@@ -65,7 +69,7 @@ async function verifySubscription(token) {
     try {
       data = JSON.parse(text);
     } catch (_) {
-      return { subscribed: false, error: `API returned ${res.status} (not JSON). Is the server running?` };
+      return { subscribed: false, error: `API returned ${res.status} (not JSON). Is the server running?`, transient: true };
     }
     if (data.subscribed) return { subscribed: true };
     if (data.needsPayment && data.checkoutUrl) return { needsPayment: true, checkoutUrl: data.checkoutUrl };
@@ -74,7 +78,7 @@ async function verifySubscription(token) {
   } catch (e) {
     console.error('Subscription verify failed:', e);
     const msg = e.name === 'AbortError' ? 'Server took too long (free tier may be starting). Try again—second attempt is usually faster.' : (e.message || 'Network error');
-    return { subscribed: false, error: msg };
+    return { subscribed: false, error: msg, transient: true };
   }
 }
 
@@ -119,6 +123,40 @@ async function loadPlayDuration() {
 
 const QUEUE_STATES_KEY = 'aplQueueStates';
 const QUEUE_STATE_MAX_AGE_MS = 60 * 60 * 1000;
+const TAB_STATE_PREFIX = 'apl_tab_';
+const TAB_STATE_MAX_AGE_MS = 60 * 60 * 1000;
+
+function saveTabStateToStorage(tabId) {
+  const state = tabStateMap.get(tabId);
+  if (!state || !state.queue || state.queue.length === 0) return;
+  const key = TAB_STATE_PREFIX + tabId;
+  const data = {
+    queue: state.queue,
+    currentIndex: Math.max(0, Math.min(state.currentIndex, state.queue.length - 1)),
+    shuffleOn: state.shuffleOn || false,
+    originalQueue: state.originalQueue ? state.originalQueue.slice(0, 500) : null,
+    savedAt: Date.now(),
+  };
+  chrome.storage.local.set({ [key]: data }).catch(() => {});
+}
+
+async function restoreTabStateFromStorage(tabId) {
+  if (tabStateMap.has(tabId)) return;
+  const key = TAB_STATE_PREFIX + tabId;
+  const result = await chrome.storage.local.get(key);
+  const data = result[key];
+  if (!data || !data.queue || data.queue.length === 0) return;
+  if (Date.now() - (data.savedAt || 0) > TAB_STATE_MAX_AGE_MS) return;
+  const state = {
+    queue: data.queue,
+    currentIndex: Math.max(0, Math.min(data.currentIndex, data.queue.length - 1)),
+    isPlaying: false,
+    isPaused: false,
+    shuffleOn: !!data.shuffleOn,
+    originalQueue: data.originalQueue || null,
+  };
+  tabStateMap.set(tabId, state);
+}
 
 function saveQueueState(searchQuery, state) {
   if (!state || state.queue.length === 0) return;
@@ -166,7 +204,7 @@ function getStatePayload(tabId) {
     elapsedSeconds,
     playDuration: globalState.playDurationSeconds,
     shuffleOn: state?.shuffleOn ?? false,
-    hasToken: !!globalState.accessToken && globalState.subscriptionActive,
+    hasToken: !!globalState.accessToken && !!globalState.gmailAccessToken && globalState.subscriptionActive,
   };
 }
 
@@ -182,7 +220,8 @@ function broadcastState() {
   chrome.runtime.sendMessage({ type: 'STATE_UPDATE', payload: getStatePayload(activeTabId) }).catch(() => {});
 }
 
-async function loadQueue(tabId, searchQuery = '') {
+async function loadQueue(tabId, searchQuery = '', visibleThreadIds = null, visibleMessageIds = null) {
+  const gen = ++loadQueueGeneration;
   chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
   if (progressBroadcastInterval) {
     clearInterval(progressBroadcastInterval);
@@ -194,20 +233,7 @@ async function loadQueue(tabId, searchQuery = '') {
   const state = getTabState(tabId);
 
   globalState.currentSearchQuery = searchQuery || '';
-  const saved = await getSavedQueueState(searchQuery);
-  if (saved) {
-    state.queue = saved.queue;
-    state.currentIndex = 0;
-    state.shuffleOn = false;
-    state.originalQueue = null;
-    state.isPlaying = false;
-    state.isPaused = false;
-    globalState.pausedElapsedSeconds = null;
-    prefetchPreload(tabId);
-    broadcastState();
-    return;
-  }
-
+  chrome.storage.local.remove(TAB_STATE_PREFIX + tabId).catch(() => {});
   state.queue = [];
   state.currentIndex = -1;
   state.isPlaying = false;
@@ -218,39 +244,46 @@ async function loadQueue(tabId, searchQuery = '') {
   preloadCache.clear();
   broadcastState();
 
-  globalState.accessToken = await getAccessToken();
-  if (!globalState.accessToken) {
+  const gmailToken = globalState.gmailAccessToken;
+  if (!gmailToken) {
     broadcastState();
     return;
   }
 
   const seenKeys = new Set();
+  const pushAttachments = (attachments) => {
+    if (gen !== loadQueueGeneration) return;
+    const toAdd = attachments.filter((a) => {
+      const key = `${a.messageId}-${a.attachmentId}`;
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+    if (toAdd.length === 0) return;
+    state.queue.push(...toAdd);
+    if (state.currentIndex < 0 && state.queue.length > 0) {
+      state.currentIndex = 0;
+      prefetchPreload(tabId);
+    }
+    broadcastState();
+    saveTabStateToStorage(tabId);
+  };
+
   try {
-    await buildAudioQueueStreaming(
-      globalState.accessToken,
-      searchQuery,
-      (attachments) => {
-        const toAdd = attachments.filter((a) => {
-          const key = `${a.messageId}-${a.attachmentId}`;
-          if (seenKeys.has(key)) return false;
-          seenKeys.add(key);
-          return true;
-        });
-        if (toAdd.length === 0) return;
-        state.queue.push(...toAdd);
-        if (state.currentIndex < 0 && state.queue.length > 0) {
-          state.currentIndex = 0;
-          prefetchPreload(tabId);
-        }
-        broadcastState();
-      },
-      500
-    );
-    saveQueueState(searchQuery, state);
+    if (visibleThreadIds && visibleThreadIds.length > 0) {
+      await buildAudioQueueFromThreadIds(gmailToken, visibleThreadIds, pushAttachments);
+    } else if (visibleMessageIds && visibleMessageIds.length > 0) {
+      await buildAudioQueueFromMessageIds(gmailToken, visibleMessageIds, pushAttachments);
+    } else {
+      await buildAudioQueueStreaming(gmailToken, searchQuery, pushAttachments, 0);
+    }
   } catch (e) {
-    console.error('Failed to load queue:', e);
+    if (gen === loadQueueGeneration) console.error('Failed to load queue:', e);
   }
-  broadcastState();
+  if (gen === loadQueueGeneration) {
+    broadcastState();
+    saveTabStateToStorage(tabId);
+  }
 }
 
 function getCacheKey(loop) {
@@ -259,7 +292,8 @@ function getCacheKey(loop) {
 
 function prefetchPreload(tabId) {
   const state = getTabState(tabId);
-  if (!globalState.accessToken || !state.queue.length) return;
+  const gmailToken = globalState.gmailAccessToken;
+  if (!gmailToken || !state.queue.length) return;
   const start = state.currentIndex;
   const end = Math.min(start + PRELOAD_COUNT, state.queue.length);
   const toFetch = [];
@@ -273,7 +307,7 @@ function prefetchPreload(tabId) {
     toFetch.map(async (loop) => {
       try {
         const data = await getAttachmentData(
-          globalState.accessToken,
+          gmailToken,
           loop.messageId,
           loop.attachmentId,
           loop.mimeType || 'audio/mpeg'
@@ -293,8 +327,10 @@ async function getCachedOrFetch(loop) {
     preloadCache.delete(key);
     return cached;
   }
+  const gmailToken = globalState.gmailAccessToken;
+  if (!gmailToken) throw new Error('Gmail not connected');
   const data = await getAttachmentData(
-    globalState.accessToken,
+    gmailToken,
     loop.messageId,
     loop.attachmentId,
     loop.mimeType || 'audio/mpeg'
@@ -420,6 +456,7 @@ async function goNext(tabId) {
   state.currentIndex = Math.min(state.currentIndex + 1, state.queue.length - 1);
   state.isPaused = false;
   saveQueueState(globalState.currentSearchQuery, state);
+  saveTabStateToStorage(tabId);
   broadcastState();
   if (activeTabId === tabId && (state.isPlaying || state.isPaused)) {
     chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
@@ -433,6 +470,7 @@ async function goPrev(tabId) {
   state.currentIndex = Math.max(state.currentIndex - 1, 0);
   state.isPaused = false;
   saveQueueState(globalState.currentSearchQuery, state);
+  saveTabStateToStorage(tabId);
   broadcastState();
   if (activeTabId === tabId && (state.isPlaying || state.isPaused)) {
     chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
@@ -450,14 +488,88 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabIdPromise = getTabIdFromSender(sender);
 
   if (msg.type === 'GET_STATE') {
-    tabIdPromise.then((tabId) => sendResponse(getStatePayload(tabId)));
+    tabIdPromise.then(async (tabId) => {
+      await restoreTabStateFromStorage(tabId);
+      sendResponse(getStatePayload(tabId));
+    });
+    return true;
+  }
+
+  if (msg.type === 'GET_USER_EMAIL') {
+    (async () => {
+      const loopmailToken = globalState.accessToken;
+      const gmailToken = globalState.gmailAccessToken;
+      let loopmailEmail = null;
+      let gmailEmail = null;
+      try {
+        if (loopmailToken) {
+          const r1 = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(loopmailToken)}`);
+          const d1 = await r1.json();
+          loopmailEmail = d1.email || null;
+        }
+        if (gmailToken) {
+          const r2 = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(gmailToken)}`);
+          const d2 = await r2.json();
+          gmailEmail = d2.email || null;
+        }
+      } catch (_) {}
+      sendResponse({ loopmailEmail, gmailEmail });
+    })();
+    return true;
+  }
+
+  if (msg.type === 'CLEAR_CACHE_AND_RELOAD') {
+    (async () => {
+      preloadCache.clear();
+      await chrome.storage.local.remove(QUEUE_STATES_KEY);
+      tabStateMap.forEach((state) => {
+        state.queue = [];
+        state.currentIndex = -1;
+        state.isPlaying = false;
+        state.isPaused = false;
+        state.shuffleOn = false;
+        state.originalQueue = null;
+      });
+      globalState.pausedElapsedSeconds = null;
+      activeTabId = null;
+      if (progressBroadcastInterval) {
+        clearInterval(progressBroadcastInterval);
+        progressBroadcastInterval = null;
+      }
+      chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
+      const [gmailTab] = await chrome.tabs.query({ url: '*://mail.google.com/*', active: true, currentWindow: true });
+      const tabId = gmailTab?.id ?? (await chrome.tabs.query({ url: '*://mail.google.com/*' }))[0]?.id;
+      if (tabId) loadQueue(tabId);
+      broadcastState();
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
+  if (msg.type === 'DISCONNECT_GMAIL') {
+    globalState.gmailAccessToken = null;
+    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
+    tabStateMap.forEach((s) => {
+      s.queue = [];
+      s.currentIndex = -1;
+      s.isPlaying = false;
+      s.isPaused = false;
+      s.originalQueue = null;
+    });
+    preloadCache.clear();
+    activeTabId = null;
+    broadcastState();
+    sendResponse({ ok: true });
     return true;
   }
 
   if (msg.type === 'SIGN_OUT') {
     const tokenToRemove = globalState.accessToken;
     globalState.accessToken = null;
+    globalState.gmailAccessToken = null;
     globalState.subscriptionActive = false;
+    chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
+    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
     tabStateMap.clear();
     activeTabId = null;
     preloadCache.clear();
@@ -479,6 +591,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     } else {
       sendResponse({ ok: true });
     }
+    return true;
+  }
+
+  if (msg.type === 'DISCONNECT_LOOPMAIL') {
+    chrome.runtime.sendMessage({ type: 'SIGN_OUT' }, () => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.type === 'SET_GMAIL_TOKEN') {
+    globalState.gmailAccessToken = msg.token;
+    chrome.storage.local.set({ [STORAGE_GMAIL_TOKEN]: msg.token });
+    getTabIdFromSender(sender).then((tabId) => {
+      if (tabId) loadQueue(tabId);
+      broadcastState();
+    });
+    sendResponse({ ok: true });
     return true;
   }
 
@@ -513,9 +641,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'SIGN_IN_COMPLETE') {
     globalState.accessToken = msg.token;
+    globalState.gmailAccessToken = msg.token;
     globalState.subscriptionActive = true;
-    getTabIdFromSender(sender).then((tabId) => {
-      if (tabId) loadQueue(tabId);
+    chrome.storage.local.set({
+      [STORAGE_LOOPMAIL_TOKEN]: msg.token,
+      [STORAGE_GMAIL_TOKEN]: msg.token,
+    });
+    chrome.tabs.query({ url: '*://mail.google.com/*' }, (tabs) => {
+      const gmailTab = tabs.find((t) => t.active) || tabs[0];
+      if (gmailTab?.id) loadQueue(gmailTab.id);
       broadcastState();
     });
     sendResponse({ ok: true });
@@ -523,41 +657,80 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'OPEN_AUTH_TAB') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('auth/auth.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL('manage/manage.html') });
     sendResponse({ ok: true });
     return true;
   }
 
   if (msg.type === 'REFRESH_SUBSCRIPTION') {
     (async () => {
-      const token = globalState.accessToken;
+      const token = await getAccessToken(false) || globalState.accessToken;
       if (!token) {
         sendResponse({ ok: true });
         return;
       }
+      globalState.accessToken = token;
+      globalState.gmailAccessToken = token;
+      chrome.storage.local.set({
+        [STORAGE_LOOPMAIL_TOKEN]: token,
+        [STORAGE_GMAIL_TOKEN]: token,
+      }).catch(() => {});
       const sub = await verifySubscription(token);
       if (sub.subscribed) {
         globalState.subscriptionActive = true;
-        const tabId = await tabIdPromise;
-        if (tabId) loadQueue(tabId);
-        broadcastState();
+      } else if (!sub.transient) {
+        globalState.subscriptionActive = false;
+        if (sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid'))) {
+          globalState.accessToken = null;
+          globalState.gmailAccessToken = null;
+          chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN).catch(() => {});
+          chrome.storage.local.remove(STORAGE_GMAIL_TOKEN).catch(() => {});
+        }
       }
+      broadcastState();
       sendResponse({ ok: true });
     })();
     return true;
   }
 
+  if (msg.type === 'CLEAR_TAB_FOR_RELOAD') {
+    tabIdPromise.then((tabId) => {
+      if (tabId) {
+        const state = getTabState(tabId);
+        state.queue = [];
+        state.currentIndex = -1;
+        state.isPlaying = false;
+        state.isPaused = false;
+        state.shuffleOn = false;
+        state.originalQueue = null;
+        if (activeTabId === tabId) {
+          activeTabId = null;
+          globalState.playbackStartTime = null;
+          globalState.pausedElapsedSeconds = null;
+          chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
+        }
+        broadcastState();
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+
   if (msg.type === 'LOAD_QUEUE') {
     const searchQuery = msg.searchQuery || '';
+    const visibleThreadIds = msg.visibleThreadIds || null;
+    const visibleMessageIds = msg.visibleMessageIds || null;
     tabIdPromise.then((tabId) => {
-      if (tabId) loadQueue(tabId, searchQuery).then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ error: e.message }));
+      if (tabId) loadQueue(tabId, searchQuery, visibleThreadIds, visibleMessageIds).then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ error: e.message }));
       else sendResponse({ error: 'No Gmail tab' });
     });
     return true;
   }
 
   if (msg.type === 'SHUFFLE') {
-    tabIdPromise.then((tabId) => {
+    tabIdPromise.then(async (tabId) => {
+      if (tabId) await restoreTabStateFromStorage(tabId);
       const state = tabId ? getTabState(tabId) : null;
       if (!state || state.queue.length === 0) {
         sendResponse({ ok: true });
@@ -595,15 +768,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'DOWNLOAD') {
     tabIdPromise.then(async (tabId) => {
+      if (tabId) await restoreTabStateFromStorage(tabId);
       const state = tabId ? getTabState(tabId) : null;
       const loop = state?.queue?.[state.currentIndex];
-      if (!loop || !globalState.accessToken) {
+      const gmailToken = globalState.gmailAccessToken;
+      if (!loop || !gmailToken) {
         sendResponse({ error: 'No loop to download' });
         return;
       }
       try {
         const { base64, mimeType } = await getAttachmentData(
-          globalState.accessToken,
+          gmailToken,
           loop.messageId,
           loop.attachmentId,
           loop.mimeType || 'audio/mpeg'
@@ -627,11 +802,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'PLAY') {
-    tabIdPromise.then((tabId) => {
+    tabIdPromise.then(async (tabId) => {
       if (!tabId) {
         sendResponse({ error: 'No Gmail tab' });
         return;
       }
+      await restoreTabStateFromStorage(tabId);
       const state = getTabState(tabId);
       if (state.isPaused) {
         resumePlayback(tabId);
@@ -644,8 +820,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'STOP') {
-    tabIdPromise.then((tabId) => {
+    tabIdPromise.then(async (tabId) => {
       if (tabId) {
+        await restoreTabStateFromStorage(tabId);
         const state = getTabState(tabId);
         if (state.isPaused) {
           stopPlayback(tabId);
@@ -659,17 +836,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'NEXT') {
-    tabIdPromise.then((tabId) => {
-      if (tabId) goNext(tabId).then(() => sendResponse({ ok: true }));
-      else sendResponse({ ok: true });
+    tabIdPromise.then(async (tabId) => {
+      if (tabId) {
+        await restoreTabStateFromStorage(tabId);
+        goNext(tabId).then(() => sendResponse({ ok: true }));
+      } else sendResponse({ ok: true });
     });
     return true;
   }
 
   if (msg.type === 'PREV') {
-    tabIdPromise.then((tabId) => {
-      if (tabId) goPrev(tabId).then(() => sendResponse({ ok: true }));
-      else sendResponse({ ok: true });
+    tabIdPromise.then(async (tabId) => {
+      if (tabId) {
+        await restoreTabStateFromStorage(tabId);
+        goPrev(tabId).then(() => sendResponse({ ok: true }));
+      } else sendResponse({ ok: true });
     });
     return true;
   }
@@ -702,7 +883,10 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.identity.onSignInChanged.addListener((account, signedIn) => {
   if (!signedIn) {
     globalState.accessToken = null;
+    globalState.gmailAccessToken = null;
     globalState.subscriptionActive = false;
+    chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
+    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
     tabStateMap.clear();
     activeTabId = null;
     broadcastState();
@@ -711,6 +895,7 @@ chrome.identity.onSignInChanged.addListener((account, signedIn) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStateMap.delete(tabId);
+  chrome.storage.local.remove(TAB_STATE_PREFIX + tabId).catch(() => {});
   if (activeTabId === tabId) {
     activeTabId = null;
     globalState.playbackStartTime = null;
@@ -723,15 +908,28 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-loadPlayDuration().then(() => {
-  getAccessToken().then(async (token) => {
-    globalState.accessToken = token;
-    if (token) {
-      const sub = await verifySubscription(token);
-      globalState.subscriptionActive = !!sub.subscribed;
+loadPlayDuration().then(async () => {
+  const stored = await chrome.storage.local.get([STORAGE_LOOPMAIL_TOKEN, STORAGE_GMAIL_TOKEN]);
+  const gmailToken = stored[STORAGE_GMAIL_TOKEN];
+  const loopmailToken = await getAccessToken(false) || stored[STORAGE_LOOPMAIL_TOKEN];
+  if (loopmailToken) {
+    globalState.accessToken = loopmailToken;
+    if (loopmailToken !== stored[STORAGE_LOOPMAIL_TOKEN]) {
+      chrome.storage.local.set({ [STORAGE_LOOPMAIL_TOKEN]: loopmailToken }).catch(() => {});
     }
-    broadcastState();
-  });
+    const sub = await verifySubscription(loopmailToken);
+    globalState.subscriptionActive = sub.subscribed || (sub.transient && !!loopmailToken);
+    if (!sub.subscribed && !sub.transient && sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid'))) {
+      globalState.accessToken = null;
+      globalState.gmailAccessToken = null;
+      chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN).catch(() => {});
+      chrome.storage.local.remove(STORAGE_GMAIL_TOKEN).catch(() => {});
+    }
+  }
+  if (gmailToken) {
+    globalState.gmailAccessToken = gmailToken;
+  }
+  broadcastState();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

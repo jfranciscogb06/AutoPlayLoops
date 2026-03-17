@@ -1,6 +1,6 @@
 # Stripe Integration Guide
 
-LoopMail uses Stripe for subscriptions ($1.99/month with a 7-day free trial). The integration is already wired up in the code—you just need to configure Stripe and add your keys.
+LoopMail uses Stripe for subscriptions ($4.99/month with a 7-day free trial). The integration is already wired up in the code—you just need to configure Stripe and add your keys.
 
 ## 1. Create a Stripe Account
 
@@ -13,7 +13,7 @@ LoopMail uses Stripe for subscriptions ($1.99/month with a 7-day free trial). Th
 2. Set:
    - **Name:** LoopMail Pro (or similar)
    - **Pricing:** Recurring
-   - **Price:** $1.99 / month
+   - **Price:** $4.99 / month
    - **Currency:** USD (or your choice)
 3. Click **Save product**.
 4. Copy the **Price ID** (starts with `price_`) — you’ll need this for `STRIPE_PRICE_ID`.

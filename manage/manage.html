@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LoopMail - Manage accounts</title>
+  <style>
+    :root {
+      --bg: #0c0c0c;
+      --bg-elevated: #141414;
+      --text: #e8e8e8;
+      --text-muted: #888;
+      --accent: #e8a838;
+      --accent-hover: #f0b84d;
+      --border: #2a2a2a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .card {
+      background: var(--bg-elevated);
+      padding: 32px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      max-width: 400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    h1 { font-size: 20px; margin: 0 0 24px; font-weight: 600; text-align: center; }
+    .section { margin-bottom: 24px; }
+    .section:last-child { margin-bottom: 0; }
+    .section-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .account-row:last-child { border-bottom: none; }
+    .account-info { font-size: 14px; }
+    .account-email { color: var(--text); }
+    .account-type { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .btn {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .btn-secondary:hover { background: rgba(232, 168, 56, 0.1); }
+    .btn-danger {
+      background: transparent;
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .btn-danger:hover { background: rgba(231, 76, 60, 0.1); }
+    .account-row > div:last-child { display: flex; gap: 8px; align-items: center; }
+    .status { margin: 16px 0; font-weight: 500; font-size: 14px; text-align: center; min-height: 20px; }
+    .status.signing-in { color: var(--accent); }
+    .status.success { color: #5cb85c; }
+    .status.error { color: #e74c3c; }
+    .hint { font-size: 12px; color: var(--text-muted); margin-top: 16px; text-align: center; line-height: 1.4; }
+    .hidden { display: none !important; }
+    .btn-block { width: 100%; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>LoopMail</h1>
+
+    <div id="signedOutView">
+      <div class="status" id="status"></div>
+      <button class="btn btn-block" id="signInBtn">Sign in to LoopMail</button>
+      <p class="hint">Sign in with the account you use for your LoopMail subscription. After sign-in, you'll go to Stripe if payment is needed.</p>
+    </div>
+
+    <div id="signedInView" class="hidden">
+      <div class="section">
+        <div class="section-title">Connected accounts</div>
+        <div class="account-row">
+          <div class="account-info">
+            <div class="account-email" id="loopmailEmail">—</div>
+            <div class="account-type">LoopMail (subscription)</div>
+          </div>
+          <button class="btn btn-danger" id="disconnectLoopmailBtn">Disconnect</button>
+        </div>
+        <div class="account-row">
+          <div class="account-info">
+            <div class="account-email" id="gmailEmail">—</div>
+            <div class="account-type">Gmail (loops)</div>
+          </div>
+          <div>
+            <button class="btn btn-secondary" id="switchGmailBtn">Switch</button>
+            <button class="btn btn-danger" id="disconnectGmailBtn">Disconnect</button>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:12px;text-align:left">LoopMail = subscription. Gmail = inbox for loops. You must connect both.</p>
+      </div>
+
+      <div class="section">
+        <button class="btn btn-secondary btn-block" id="resetCacheBtn">Reset cache / refresh queue</button>
+      </div>
+
+      <div class="section">
+        <div class="status" id="switchStatus" style="display:none;margin-bottom:8px"></div>
+        <button class="btn btn-secondary btn-block" id="switchAccountBtn">Switch Gmail account</button>
+      </div>
+    </div>
+  </div>
+  <script src="../lib/config.js"></script>
+  <script src="manage.js"></script>
+</body>
+</html>

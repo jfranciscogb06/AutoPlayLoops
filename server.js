@@ -79,8 +79,11 @@ app.get('/api/debug', (req, res) => {
 
 async function verifyGoogleToken(token) {
   const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`);
-  if (!res.ok) throw new Error('Invalid token');
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = data.error_description || data.error || 'Invalid token';
+    throw new Error(err === 'Invalid Value' || err.includes('invalid') ? 'Token expired. Please sign in again.' : err);
+  }
   if (!data.email) throw new Error('No email in token');
   return { email: data.email };
 }
@@ -124,8 +127,14 @@ app.post('/api/auth', async (req, res) => {
     return res.status(200).json({ needsPayment: true, checkoutUrl: session.url });
   } catch (err) {
     console.error('Auth error:', err);
-    return res.status(500).json({ error: err.message || 'Auth failed' });
+    const isAuthError = /expired|invalid|token/i.test(err.message || '');
+    return res.status(isAuthError ? 401 : 500).json({ error: err.message || 'Auth failed' });
   }
+});
+
+// Explicit privacy policy (required for Chrome Web Store)
+app.get('/privacy.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'website', 'privacy.html'));
 });
 
 // Static files (website + auth success/cancel)

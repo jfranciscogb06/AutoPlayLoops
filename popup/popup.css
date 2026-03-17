@@ -65,6 +65,12 @@ body {
   gap: 8px;
 }
 
+.signed-in-as {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
 .link {
   color: var(--accent);
   text-decoration: none;

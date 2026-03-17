@@ -1,0 +1,31 @@
+LoopMail Privacy Policy
+
+Last updated: February 2026
+
+What LoopMail Does
+LoopMail is a Chrome extension that lets you preview audio attachments from your Gmail inbox. A playback bar appears in Gmail and plays 10-second snippets of audio files (MP3, WAV, FLAC, etc.) from your emails.
+
+Data We Collect
+• Email address — Used to verify your subscription and link your account.
+• Gmail access — We request read-only access to your Gmail inbox to fetch email metadata and audio attachments for playback. We only read emails that match your current view/search.
+• Payment info — If you subscribe, payment is handled by Stripe. We do not store your card details.
+
+How We Use Your Data
+• To provide the extension (play audio from your inbox).
+• To verify your subscription status.
+• To process payments (via Stripe).
+
+Data Storage
+• OAuth tokens are stored locally in your browser.
+• We do not store your emails or audio files on our servers. Audio is streamed from Gmail's API to your browser for playback.
+
+Data Sharing
+We do not sell your data. We share data only with:
+• Google (OAuth, Gmail API) — for sign-in and inbox access
+• Stripe — for payment processing
+
+Your Rights
+You can disconnect your Gmail account or cancel your subscription at any time from the extension settings. You can also uninstall the extension to remove all local data.
+
+Contact
+For questions: jfranciscogb06@gmail.com

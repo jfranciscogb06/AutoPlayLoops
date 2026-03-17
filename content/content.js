@@ -8,7 +8,7 @@ let barProgressInterval = null;
 let panelOpen = false;
 const BAR_HIDDEN_KEY = 'aplBarHidden';
 
-function createTab() {
+function createTab(panel) {
   const tab = document.createElement('div');
   tab.className = 'apl-root apl-tab';
   tab.innerHTML = `
@@ -28,7 +28,7 @@ function createTab() {
     </div>
   `;
   tab.addEventListener('click', (e) => {
-    if (!e.target.closest('.apl-bar-btn') && !e.target.closest('.apl-bar-signin')) {
+    if (!e.target.closest('.apl-bar-btn') && !e.target.closest('.apl-bar-signin') && panel) {
       panelOpen = !panelOpen;
       panel.style.display = panelOpen ? 'block' : 'none';
       if (panelOpen) getState().then(updatePanel);
@@ -240,8 +240,8 @@ function inject() {
   container.id = 'apl-container';
   container.style.cssText = 'display:inline-flex;align-items:center;width:min(480px,26vw);min-width:0;max-width:min(480px,26vw);flex-shrink:0;box-sizing:border-box;';
 
-  const tab = createTab();
   const panel = createPanel();
+  const tab = createTab(panel);
 
   const showBtn = document.createElement('button');
   showBtn.id = 'apl-show-btn';
@@ -287,13 +287,15 @@ function inject() {
 
   applyPosition();
 
-  getState().then((s) => {
-    updateBar(tab, s);
-    if (panelOpen) updatePanel(s);
-    if (s?.hasToken && !searchPollInterval) {
-      refreshQueueWithSearch();
-      startSearchPolling();
-    }
+  chrome.runtime.sendMessage({ type: 'CLEAR_TAB_FOR_RELOAD' }, () => {
+    getState().then((s) => {
+      updateBar(tab, s);
+      if (panelOpen) updatePanel(s);
+      if (s?.hasToken && !searchPollInterval) {
+        refreshQueueWithSearch();
+        startSearchPolling();
+      }
+    });
   });
 
   chrome.runtime.sendMessage({ type: 'REFRESH_SUBSCRIPTION' }).catch(() => {});
@@ -322,11 +324,31 @@ function inject() {
   window.addEventListener('hashchange', () => {
     resetProgressBar();
     const current = getSearchHash();
-    if (current !== lastSearchHash && current) {
+    if (normalizeSearchForCompare(current) !== normalizeSearchForCompare(lastSearchHash)) {
       lastSearchHash = current;
+      lastLoadedThreadIds = null;
       refreshQueueWithSearch();
     }
   });
+
+  document.addEventListener('scroll', scheduleVisibleSampleUpdate, { passive: true, capture: true });
+  window.addEventListener('scroll', scheduleVisibleSampleUpdate, { passive: true });
+  window.addEventListener('resize', scheduleVisibleSampleUpdate);
+
+  let scrollRefreshTimeout = null;
+  const onScrollForQueue = () => {
+    if (scrollRefreshTimeout) clearTimeout(scrollRefreshTimeout);
+    scrollRefreshTimeout = setTimeout(() => {
+      scrollRefreshTimeout = null;
+      const visible = getVisibleIds();
+      const ids = visible?.threadIds ?? visible?.messageIds;
+      if (!ids || ids.length === 0) return;
+      const changed = !lastLoadedThreadIds || ids.length !== lastLoadedThreadIds.length ||
+        ids.some((id, i) => id !== lastLoadedThreadIds[i]);
+      if (changed) refreshQueueWithSearch();
+    }, 2000);
+  };
+  document.addEventListener('scroll', onScrollForQueue, { passive: true, capture: true });
 
   tab.querySelector('#aplBarPrev')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -376,13 +398,11 @@ function resetProgressBar() {
 
 function getSearchQueryFromHash() {
   const hash = window.location.hash || '';
-  const match = hash.match(/#search\/(.+)/);
+  const match = hash.match(/#search\/(.+?)(?:\/|$)/);
   if (!match) return '';
-  const full = match[1];
-  const parts = full.split('/');
-  const queryPart = parts.length > 1 ? parts.slice(0, -1).join('/') : full;
+  const raw = match[1];
   try {
-    return decodeURIComponent(queryPart.replace(/\+/g, ' ')).trim();
+    return decodeURIComponent(raw.replace(/\+/g, ' ')).trim();
   } catch {
     return '';
   }
@@ -394,40 +414,180 @@ function getGmailSearchFromUrl() {
 
 function getSearchHash() {
   const hash = window.location.hash || '';
-  const match = hash.match(/#search\/(.+)/);
+  const match = hash.match(/#search\/(.+?)(?:\/|$)/);
   if (!match) return '';
-  const full = match[1];
-  const parts = full.split('/');
-  return parts.length > 1 ? parts.slice(0, -1).join('/') : full;
+  return match[1];
 }
 
+function normalizeSearchForCompare(hash) {
+  if (!hash) return '';
+  try {
+    return decodeURIComponent(hash.replace(/\+/g, ' ')).trim();
+  } catch {
+    return hash;
+  }
+}
+
+const EMAIL_LIST_TOP = 140;
+
+/** Get visible thread IDs from Gmail DOM (rows on screen), top to bottom. Returns { threadIds, messageIds } - use whichever is available. */
+function getVisibleIds() {
+  const viewportTop = EMAIL_LIST_TOP;
+  const viewportBottom = window.innerHeight;
+  const threadFound = [];
+  const messageFound = [];
+  const seenThread = new Set();
+  const seenMessage = new Set();
+
+  const threadRows = document.querySelectorAll('[role="main"] [data-legacy-thread-id], [data-legacy-thread-id]');
+  for (const el of threadRows) {
+    const id = el.getAttribute('data-legacy-thread-id');
+    if (!id || seenThread.has(id)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom < viewportTop || rect.top > viewportBottom) continue;
+    if (rect.width < 50 || rect.height < 20) continue;
+    seenThread.add(id);
+    threadFound.push({ top: rect.top, id });
+  }
+
+  const messageRows = document.querySelectorAll('[role="main"] [data-legacy-message-id], [data-legacy-message-id]');
+  for (const el of messageRows) {
+    const id = el.getAttribute('data-legacy-message-id');
+    if (!id || seenMessage.has(id)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom < viewportTop || rect.top > viewportBottom) continue;
+    if (rect.width < 50 || rect.height < 20) continue;
+    seenMessage.add(id);
+    messageFound.push({ top: rect.top, id });
+  }
+
+  if (threadFound.length > 0) {
+    threadFound.sort((a, b) => a.top - b.top);
+    return { threadIds: threadFound.map((f) => f.id), messageIds: null };
+  }
+  if (messageFound.length > 0) {
+    messageFound.sort((a, b) => a.top - b.top);
+    return { threadIds: null, messageIds: messageFound.map((f) => f.id) };
+  }
+  return null;
+}
+
+function getVisibleThreadIds() {
+  const result = getVisibleIds();
+  return result?.threadIds ?? null;
+}
+
+let refreshQueueTimeout = null;
+const REFRESH_DEBOUNCE_MS = 400;
+
 function refreshQueueWithSearch() {
-  const searchQuery = getGmailSearchFromUrl();
-  chrome.runtime.sendMessage({ type: 'LOAD_QUEUE', searchQuery }, () => {
-    getState().then((s) => {
-      const t = document.querySelector('.apl-tab');
-      if (t) {
-        resetProgressBar();
-        updateBar(t, s);
-      }
-      if (panelOpen) updatePanel(s);
+  if (refreshQueueTimeout) clearTimeout(refreshQueueTimeout);
+  refreshQueueTimeout = setTimeout(() => {
+    refreshQueueTimeout = null;
+    const searchQuery = getGmailSearchFromUrl();
+    const visible = getVisibleIds();
+    const visibleThreadIds = visible?.threadIds ?? null;
+    const visibleMessageIds = visible?.messageIds ?? null;
+    if (visibleThreadIds || visibleMessageIds) lastLoadedThreadIds = visibleThreadIds || visibleMessageIds;
+    chrome.runtime.sendMessage({ type: 'LOAD_QUEUE', searchQuery, visibleThreadIds, visibleMessageIds }, () => {
+      getState().then((s) => {
+        const t = document.querySelector('.apl-tab');
+        if (t) {
+          resetProgressBar();
+          updateBar(t, s);
+        }
+        if (panelOpen) updatePanel(s);
+      });
     });
-  });
+  }, REFRESH_DEBOUNCE_MS);
 }
 
 let lastSearchHash = null;
 let searchPollInterval = null;
+let lastLoadedThreadIds = null;
 
 function startSearchPolling() {
   if (searchPollInterval) return;
   lastSearchHash = getSearchHash();
   searchPollInterval = setInterval(() => {
     const current = getSearchHash();
-    if (current !== lastSearchHash && current) {
+    if (normalizeSearchForCompare(current) !== normalizeSearchForCompare(lastSearchHash)) {
       lastSearchHash = current;
       refreshQueueWithSearch();
     }
-  }, 1500);
+  }, 2000);
+}
+
+/** Matches Gmail sample tags: "[All The Way] 11...", "(guitar,synth) fa...", "92. DROP-OUT..." */
+const SAMPLE_TAG_RE = /^\[[^\]]{2,}|^[!]?\([^)]{2,}|^\d+\.\s+.+/;
+
+/** Subject-line fragments to skip - often match (paren) but aren't sample tags */
+const SUBJECT_NOISE = /^\([^)]+\)\s*(new|inbox|loops?)\s*$/i;
+
+function getFirstVisibleSampleTag() {
+  const viewportTop = EMAIL_LIST_TOP;
+  const viewportBottom = window.innerHeight;
+  const found = [];
+  const seen = new Set();
+
+  function addIfValid(el, text) {
+    const t = (text || el.textContent || '').trim();
+    if (!t || t.length > 80 || t.length < 3) return;
+    if (!SAMPLE_TAG_RE.test(t)) return;
+    if (SUBJECT_NOISE.test(t)) return;
+    if (seen.has(t)) return;
+    seen.add(t);
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom < viewportTop || rect.top > viewportBottom) return;
+    if (rect.width < 10 || rect.height < 5) return;
+    found.push({ top: rect.top, text: t });
+  }
+
+  const byClass = document.querySelectorAll('[class*="bqe"], [class*="bq4"], [class*="y2"], [class*="ajy"], [class*="aLE"], span[style*="border"], span[style*="padding"]');
+  for (const el of byClass) {
+    addIfValid(el, el.textContent);
+  }
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const text = (node.textContent || '').trim();
+    if (!text || !SAMPLE_TAG_RE.test(text) || text.length > 80 || text.length < 3) continue;
+    if (SUBJECT_NOISE.test(text)) continue;
+    const parent = node.parentElement;
+    if (!parent || parent.closest?.('.apl-root')) continue;
+    addIfValid(parent, text);
+  }
+
+  if (found.length === 0) return null;
+  found.sort((a, b) => a.top - b.top);
+  return found[0].text;
+}
+
+function getVisibleSampleLabel(state) {
+  const loop = state?.currentLoop ?? (state?.queue?.[state?.currentIndex]);
+  if (state?.isPlaying || state?.isPaused || (loop && state?.currentIndex >= 0)) {
+    return loop?.filename || loop?.subject || 'Loops';
+  }
+  const visible = getFirstVisibleSampleTag();
+  if (visible) return visible;
+  return loop?.filename || loop?.subject || 'Loops';
+}
+
+let visibleSampleRaf = null;
+function scheduleVisibleSampleUpdate() {
+  if (visibleSampleRaf) return;
+  visibleSampleRaf = requestAnimationFrame(() => {
+    visibleSampleRaf = null;
+    getState().then((state) => {
+      const label = document.querySelector('#aplBarLabel');
+      if (!label || !state?.hasToken) return;
+      const inner = label.querySelector('.apl-bar-label-inner');
+      const name = getVisibleSampleLabel(state);
+      if (inner) inner.textContent = name;
+      label.title = name;
+    });
+  });
 }
 
 function updateBar(tab, state) {
@@ -467,8 +627,7 @@ function updateBar(tab, state) {
   }
   if (label) {
     const inner = label.querySelector('.apl-bar-label-inner');
-    const loop = state?.currentLoop ?? (state?.queue?.[state?.currentIndex]);
-    const name = loop?.filename || loop?.subject || 'Loops';
+    const name = getVisibleSampleLabel(state);
     if (inner) inner.textContent = name;
     label.title = name;
   }
@@ -483,6 +642,20 @@ chrome.runtime.onMessage.addListener((msg) => {
       refreshQueueWithSearch();
       startSearchPolling();
     }
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    getState().then((s) => {
+      const t = document.querySelector('.apl-tab');
+      if (t) updateBar(t, s);
+      if (panelOpen) updatePanel(s);
+      if (s?.hasToken && !searchPollInterval) {
+        refreshQueueWithSearch();
+        startSearchPolling();
+      }
+    });
   }
 });
 

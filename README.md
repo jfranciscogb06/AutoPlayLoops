@@ -56,7 +56,7 @@ The extension requires a backend for auth and subscription. Only Google sign-in 
 
 1. **Create a Stripe account** and product:
    - See [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) for a step-by-step Stripe integration guide
-   - Create a subscription product at $1.99/month
+   - Create a subscription product at $4.99/month
    - Copy the Price ID (`price_...`)
 
 3. **Deploy** (Vercel or Render):

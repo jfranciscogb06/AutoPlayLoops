@@ -1,24 +1,53 @@
 /**
  * LoopMail - Auth page
- * Runs sign-in + API call directly here to avoid background message-passing hangs
+ * Uses launchWebAuthFlow with prompt=select_account so user can choose which Google account to use
  */
 
 const API_BASE = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://autoplayloops.onrender.com/api';
 
-function clearCachedTokens() {
-  return new Promise((resolve) => {
-    chrome.identity.clearAllCachedAuthTokens(resolve);
-  });
-}
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
 
 function getToken() {
+  const clientId = typeof LOOPMAIL_WEB_OAUTH_CLIENT_ID !== 'undefined' && LOOPMAIL_WEB_OAUTH_CLIENT_ID
+    ? LOOPMAIL_WEB_OAUTH_CLIENT_ID
+    : chrome.runtime.getManifest().oauth2?.client_id;
+  if (!clientId) return Promise.resolve(null);
+
+  const redirectUri = chrome.identity.getRedirectURL();
+  const authUrl = [
+    'https://accounts.google.com/o/oauth2/v2/auth',
+    `?client_id=${encodeURIComponent(clientId)}`,
+    `&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    '&response_type=token',
+    `&scope=${encodeURIComponent(SCOPES)}`,
+    '&prompt=select_account',
+  ].join('');
+
   return new Promise((resolve) => {
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (redirectUrl) => {
       if (chrome.runtime.lastError) {
         resolve(null);
-      } else {
-        resolve(token);
+        return;
       }
+      if (!redirectUrl) {
+        resolve(null);
+        return;
+      }
+      const hash = redirectUrl.split('#')[1];
+      if (!hash) {
+        resolve(null);
+        return;
+      }
+      const params = new URLSearchParams(hash);
+      if (params.get('error')) {
+        resolve(null);
+        return;
+      }
+      const token = params.get('access_token');
+      resolve(token || null);
     });
   });
 }
@@ -57,8 +86,6 @@ document.getElementById('signInBtn').addEventListener('click', async () => {
   btn.disabled = true;
   status.textContent = 'Opening Google sign-in...';
   status.className = 'status signing-in';
-
-  await clearCachedTokens();
 
   let token;
   try {
