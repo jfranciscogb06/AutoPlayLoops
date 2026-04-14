@@ -52,7 +52,7 @@ async function getAccessToken(interactive = false) {
 }
 
 async function verifySubscription(token) {
-  const base = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://autoplayloops.onrender.com/api';
+  const base = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://getloopmail.com/api';
   const url = `${base}/auth`;
   try {
     const ctrl = new AbortController();
@@ -82,8 +82,18 @@ async function verifySubscription(token) {
   }
 }
 
-function getLoopKey(loop) {
-  return `${loop.messageId}-${loop.attachmentId}`;
+/** Verifies subscription; on expired/invalid, tries token refresh once before giving up. Returns sub + refreshedToken if refreshed. */
+async function verifyWithRetry(token) {
+  let sub = await verifySubscription(token);
+  if (sub.subscribed || sub.needsPayment || sub.transient) return sub;
+  const isAuthError = sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid') || /invalid.*token|token.*invalid/i.test(sub.error));
+  if (!isAuthError) return sub;
+  const fresh = await getAccessToken(false);
+  if (fresh && fresh !== token) {
+    const retrySub = await verifySubscription(fresh);
+    if (retrySub.subscribed) return { ...retrySub, refreshedToken: fresh };
+  }
+  return sub;
 }
 
 async function ensureOffscreenDocument() {
@@ -99,21 +109,6 @@ async function ensureOffscreenDocument() {
     reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
     justification: 'Play audio loops from Gmail',
   });
-}
-
-async function closeOffscreenDocument() {
-  await chrome.offscreen.closeDocument();
-}
-
-async function sendToOffscreen(msg) {
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [chrome.runtime.getURL('offscreen/offscreen.html')],
-  });
-  if (contexts.length === 0) return;
-  const offscreen = contexts[0];
-  // Offscreen documents don't have a tabId; we broadcast to all extension pages
-  chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
 async function loadPlayDuration() {
@@ -175,16 +170,6 @@ function saveQueueState(searchQuery, state) {
   }).catch(() => {});
 }
 
-async function getSavedQueueState(searchQuery) {
-  const result = await chrome.storage.local.get(QUEUE_STATES_KEY);
-  const map = result[QUEUE_STATES_KEY] || {};
-  const key = searchQuery || '__inbox__';
-  const saved = map[key];
-  if (!saved || !saved.queue || saved.queue.length === 0) return null;
-  if (Date.now() - (saved.savedAt || 0) > QUEUE_STATE_MAX_AGE_MS) return null;
-  return saved;
-}
-
 function getStatePayload(tabId) {
   const state = tabId ? getTabState(tabId) : null;
   const currentLoop = state?.queue?.[state.currentIndex] || null;
@@ -222,12 +207,14 @@ function broadcastState() {
 
 async function loadQueue(tabId, searchQuery = '', visibleThreadIds = null, visibleMessageIds = null) {
   const gen = ++loadQueueGeneration;
-  chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
-  if (progressBroadcastInterval) {
-    clearInterval(progressBroadcastInterval);
-    progressBroadcastInterval = null;
-  }
+  // Only interrupt playback when reloading the tab that is currently playing.
+  // Loading a queue for a different Gmail tab should not stop ongoing audio.
   if (activeTabId === tabId) {
+    chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
+    if (progressBroadcastInterval) {
+      clearInterval(progressBroadcastInterval);
+      progressBroadcastInterval = null;
+    }
     activeTabId = null;
   }
   const state = getTabState(tabId);
@@ -417,9 +404,10 @@ async function resumePlayback(tabId) {
     await ensureOffscreenDocument();
     const { base64, mimeType } = await getCachedOrFetch(loop);
     const durationMs = globalState.playDurationSeconds * 1000;
+    const loopName = loop.filename || loop.subject || 'Unknown';
     chrome.runtime.sendMessage({
       type: 'OFFSCREEN_PLAY_FROM',
-      payload: { base64, mimeType, durationMs, startOffsetMs: elapsedMs },
+      payload: { base64, mimeType, durationMs, startOffsetMs: elapsedMs, loopName },
     }).catch(() => {});
   } catch (e) {
     console.error('Resume failed:', e);
@@ -453,13 +441,17 @@ async function stopPlayback(tabId) {
 async function goNext(tabId) {
   const state = getTabState(tabId);
   if (state.queue.length === 0) return;
+  if (progressBroadcastInterval) {
+    clearInterval(progressBroadcastInterval);
+    progressBroadcastInterval = null;
+  }
+  globalState.playbackStartTime = null;
   state.currentIndex = Math.min(state.currentIndex + 1, state.queue.length - 1);
   state.isPaused = false;
   saveQueueState(globalState.currentSearchQuery, state);
   saveTabStateToStorage(tabId);
   broadcastState();
   if (activeTabId === tabId && (state.isPlaying || state.isPaused)) {
-    chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
     await playCurrent(tabId);
   }
 }
@@ -467,14 +459,46 @@ async function goNext(tabId) {
 async function goPrev(tabId) {
   const state = getTabState(tabId);
   if (state.queue.length === 0) return;
+  if (progressBroadcastInterval) {
+    clearInterval(progressBroadcastInterval);
+    progressBroadcastInterval = null;
+  }
+  globalState.playbackStartTime = null;
   state.currentIndex = Math.max(state.currentIndex - 1, 0);
   state.isPaused = false;
   saveQueueState(globalState.currentSearchQuery, state);
   saveTabStateToStorage(tabId);
   broadcastState();
   if (activeTabId === tabId && (state.isPlaying || state.isPaused)) {
-    chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
     await playCurrent(tabId);
+  }
+}
+
+function performSignOut(onDone) {
+  const tokenToRemove = globalState.accessToken;
+  globalState.accessToken = null;
+  globalState.gmailAccessToken = null;
+  globalState.subscriptionActive = false;
+  chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
+  chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
+  tabStateMap.clear();
+  activeTabId = null;
+  preloadCache.clear();
+  globalState.playbackStartTime = null;
+  if (progressBroadcastInterval) {
+    clearInterval(progressBroadcastInterval);
+    progressBroadcastInterval = null;
+  }
+  chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
+  broadcastState();
+  if (tokenToRemove) {
+    fetch(`https://oauth2.googleapis.com/revoke?token=${tokenToRemove}`, { method: 'POST' })
+      .catch(() => {})
+      .finally(() => {
+        chrome.identity.removeCachedAuthToken({ token: tokenToRemove }, onDone);
+      });
+  } else {
+    onDone();
   }
 }
 
@@ -563,39 +587,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === 'SIGN_OUT') {
-    const tokenToRemove = globalState.accessToken;
-    globalState.accessToken = null;
-    globalState.gmailAccessToken = null;
-    globalState.subscriptionActive = false;
-    chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
-    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
-    tabStateMap.clear();
-    activeTabId = null;
-    preloadCache.clear();
-    globalState.playbackStartTime = null;
-    if (progressBroadcastInterval) {
-      clearInterval(progressBroadcastInterval);
-      progressBroadcastInterval = null;
-    }
-    chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
-    broadcastState();
-    if (tokenToRemove) {
-      fetch(`https://oauth2.googleapis.com/revoke?token=${tokenToRemove}`, { method: 'POST' })
-        .catch(() => {})
-        .finally(() => {
-          chrome.identity.removeCachedAuthToken({ token: tokenToRemove }, () => {
-            sendResponse({ ok: true });
-          });
-        });
-    } else {
-      sendResponse({ ok: true });
-    }
-    return true;
-  }
-
-  if (msg.type === 'DISCONNECT_LOOPMAIL') {
-    chrome.runtime.sendMessage({ type: 'SIGN_OUT' }, () => sendResponse({ ok: true }));
+  if (msg.type === 'SIGN_OUT' || msg.type === 'DISCONNECT_LOOPMAIL') {
+    performSignOut(() => sendResponse({ ok: true }));
     return true;
   }
 
@@ -607,35 +600,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       broadcastState();
     });
     sendResponse({ ok: true });
-    return true;
-  }
-
-  if (msg.type === 'SIGN_IN') {
-    (async () => {
-      try {
-        await chrome.identity.clearAllCachedAuthTokens();
-      } catch (e) {
-        // Ignore - may not exist in older Chrome
-      }
-      const token = await getAccessToken(true);
-      if (!token) {
-        sendResponse({ ok: false, error: 'Sign-in failed' });
-        return;
-      }
-      globalState.accessToken = token;
-      const sub = await verifySubscription(token);
-      if (sub.subscribed) {
-        globalState.subscriptionActive = true;
-        const tabId = await tabIdPromise;
-        if (tabId) loadQueue(tabId);
-        broadcastState();
-        sendResponse({ ok: true });
-      } else if (sub.needsPayment) {
-        sendResponse({ ok: false, needsPayment: true, checkoutUrl: sub.checkoutUrl });
-      } else {
-        sendResponse({ ok: false, error: sub.error || 'Subscription check failed' });
-      }
-    })();
     return true;
   }
 
@@ -651,6 +615,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const gmailTab = tabs.find((t) => t.active) || tabs[0];
       if (gmailTab?.id) loadQueue(gmailTab.id);
       broadcastState();
+      tabs.forEach((tab) => {
+        if (tab.id) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_REFRESH_PROMPT' }).catch(() => {});
+      });
     });
     sendResponse({ ok: true });
     return true;
@@ -669,23 +636,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
-      globalState.accessToken = token;
-      globalState.gmailAccessToken = token;
-      chrome.storage.local.set({
-        [STORAGE_LOOPMAIL_TOKEN]: token,
-        [STORAGE_GMAIL_TOKEN]: token,
-      }).catch(() => {});
-      const sub = await verifySubscription(token);
+      const sub = await verifyWithRetry(token);
+      if (sub.refreshedToken) {
+        globalState.accessToken = sub.refreshedToken;
+        globalState.gmailAccessToken = sub.refreshedToken;
+        chrome.storage.local.set({
+          [STORAGE_LOOPMAIL_TOKEN]: sub.refreshedToken,
+          [STORAGE_GMAIL_TOKEN]: sub.refreshedToken,
+        }).catch(() => {});
+      } else {
+        globalState.accessToken = token;
+        globalState.gmailAccessToken = token;
+        chrome.storage.local.set({
+          [STORAGE_LOOPMAIL_TOKEN]: token,
+          [STORAGE_GMAIL_TOKEN]: token,
+        }).catch(() => {});
+      }
       if (sub.subscribed) {
         globalState.subscriptionActive = true;
       } else if (!sub.transient) {
-        globalState.subscriptionActive = false;
-        if (sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid'))) {
-          globalState.accessToken = null;
-          globalState.gmailAccessToken = null;
-          chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN).catch(() => {});
-          chrome.storage.local.remove(STORAGE_GMAIL_TOKEN).catch(() => {});
+        // Only flip subscriptionActive off for clear auth failures (expired/invalid token
+        // or explicit subscription lapse). Generic backend errors keep the current state
+        // to avoid false sign-outs from Render cold starts or transient API issues.
+        const isAuthFailure = sub.error && /expired|invalid.*token|token.*invalid|unauthorized|not.*subscribed|no.*subscription/i.test(sub.error);
+        if (isAuthFailure) {
+          globalState.subscriptionActive = false;
         }
+        /* Never clear stored tokens on verify failure - only on explicit sign-out. */
       }
       broadcastState();
       sendResponse({ ok: true });
@@ -865,6 +842,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'AUDIO_PREV') {
+    if (activeTabId) goPrev(activeTabId).then(() => sendResponse({ ok: true }));
+    else sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === 'AUDIO_PAUSE') {
+    if (activeTabId) {
+      restoreTabStateFromStorage(activeTabId).then(() => {
+        pausePlayback(activeTabId);
+        sendResponse({ ok: true });
+      });
+    } else sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === 'AUDIO_RESUME') {
+    if (activeTabId) {
+      restoreTabStateFromStorage(activeTabId).then(() => {
+        resumePlayback(activeTabId);
+        sendResponse({ ok: true });
+      });
+    } else sendResponse({ ok: true });
+    return true;
+  }
+
   return false;
 });
 
@@ -880,13 +883,22 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-chrome.identity.onSignInChanged.addListener((account, signedIn) => {
+chrome.identity.onSignInChanged.addListener(async (account, signedIn) => {
   if (!signedIn) {
+    // onSignInChanged fires spuriously during Chrome token refresh cycles.
+    // Try a silent re-auth before treating this as a real sign-out.
+    const freshToken = await getAccessToken(false);
+    if (freshToken) {
+      // Chrome recovered a valid token — just update memory and carry on.
+      globalState.accessToken = freshToken;
+      globalState.gmailAccessToken = freshToken;
+      broadcastState();
+      return;
+    }
+    // Genuinely signed out of Chrome — clear session.
     globalState.accessToken = null;
     globalState.gmailAccessToken = null;
     globalState.subscriptionActive = false;
-    chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
-    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
     tabStateMap.clear();
     activeTabId = null;
     broadcastState();
@@ -910,24 +922,48 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 loadPlayDuration().then(async () => {
   const stored = await chrome.storage.local.get([STORAGE_LOOPMAIL_TOKEN, STORAGE_GMAIL_TOKEN]);
-  const gmailToken = stored[STORAGE_GMAIL_TOKEN];
-  const loopmailToken = await getAccessToken(false) || stored[STORAGE_LOOPMAIL_TOKEN];
+  const storedLoopmail = stored[STORAGE_LOOPMAIL_TOKEN];
+  const storedGmail = stored[STORAGE_GMAIL_TOKEN];
+
+  // Optimistically restore tokens from storage immediately so that any GET_STATE
+  // arriving while the subscription verification round-trip is in-flight (e.g. Render
+  // cold start after laptop sleep) returns hasToken=true instead of signing the user out.
+  if (storedLoopmail) {
+    // Get a fresh token FIRST so queue loads with a valid (non-expired) token.
+    // getAccessToken(false) uses Chrome's identity system which handles refresh silently.
+    const freshToken = await getAccessToken(false) || storedLoopmail;
+    globalState.accessToken = freshToken;
+    globalState.gmailAccessToken = freshToken;
+    globalState.subscriptionActive = true;
+    broadcastState();
+  }
+
+  let loopmailToken = globalState.accessToken || storedLoopmail;
   if (loopmailToken) {
-    globalState.accessToken = loopmailToken;
-    if (loopmailToken !== stored[STORAGE_LOOPMAIL_TOKEN]) {
-      chrome.storage.local.set({ [STORAGE_LOOPMAIL_TOKEN]: loopmailToken }).catch(() => {});
-    }
-    const sub = await verifySubscription(loopmailToken);
-    globalState.subscriptionActive = sub.subscribed || (sub.transient && !!loopmailToken);
-    if (!sub.subscribed && !sub.transient && sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid'))) {
-      globalState.accessToken = null;
-      globalState.gmailAccessToken = null;
-      chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN).catch(() => {});
-      chrome.storage.local.remove(STORAGE_GMAIL_TOKEN).catch(() => {});
+    const sub = await verifyWithRetry(loopmailToken);
+    if (sub.refreshedToken) loopmailToken = sub.refreshedToken;
+    if (sub.subscribed) {
+      globalState.accessToken = loopmailToken;
+      globalState.gmailAccessToken = loopmailToken;
+      globalState.subscriptionActive = true;
+      chrome.storage.local.set({
+        [STORAGE_LOOPMAIL_TOKEN]: loopmailToken,
+        [STORAGE_GMAIL_TOKEN]: loopmailToken,
+      }).catch(() => {});
+    } else if (sub.transient) {
+      // Network/cold-start error — keep the optimistic state; user stays signed in.
+      globalState.accessToken = loopmailToken;
+      globalState.gmailAccessToken = storedGmail || loopmailToken;
+    } else {
+      // Definitive failure (subscription lapsed, token truly invalid) — sign out.
+      globalState.subscriptionActive = false;
+      globalState.accessToken = loopmailToken;
+      globalState.gmailAccessToken = storedGmail || loopmailToken;
+      /* Keep tokens in storage — only explicit SIGN_OUT removes them. */
     }
   }
-  if (gmailToken) {
-    globalState.gmailAccessToken = gmailToken;
+  if (storedGmail && !globalState.gmailAccessToken) {
+    globalState.gmailAccessToken = storedGmail;
   }
   broadcastState();
 });
