@@ -310,9 +310,11 @@ app.post('/api/billing-portal', async (req, res) => {
     const customer = await findCustomerByEmail(email);
     if (!customer) return res.status(404).json({ error: 'No subscription found for this account.' });
 
+    const portalConfig = (process.env.STRIPE_PORTAL_CONFIG_ID || '').trim();
     const session = await stripe.billingPortal.sessions.create({
       customer: customer.id,
       return_url: getBaseUrl(),
+      ...(portalConfig ? { configuration: portalConfig } : {}),
     });
     return res.status(200).json({ url: session.url });
   } catch (err) {
