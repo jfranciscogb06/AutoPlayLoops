@@ -3,50 +3,16 @@
  * Uses launchWebAuthFlow with prompt=select_account so user can choose which Google account to use
  */
 
-const API_BASE = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://autoplayloops.onrender.com/api';
+const API_BASE = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://getloopmail.com/api';
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/userinfo.email',
-].join(' ');
 
 function getToken() {
-  const clientId = typeof LOOPMAIL_WEB_OAUTH_CLIENT_ID !== 'undefined' && LOOPMAIL_WEB_OAUTH_CLIENT_ID
-    ? LOOPMAIL_WEB_OAUTH_CLIENT_ID
-    : chrome.runtime.getManifest().oauth2?.client_id;
-  if (!clientId) return Promise.resolve(null);
-
-  const redirectUri = chrome.identity.getRedirectURL();
-  const authUrl = [
-    'https://accounts.google.com/o/oauth2/v2/auth',
-    `?client_id=${encodeURIComponent(clientId)}`,
-    `&redirect_uri=${encodeURIComponent(redirectUri)}`,
-    '&response_type=token',
-    `&scope=${encodeURIComponent(SCOPES)}`,
-    '&prompt=select_account',
-  ].join('');
-
   return new Promise((resolve) => {
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (redirectUrl) => {
+    chrome.identity.getAuthToken({ interactive: true }, (token) => {
       if (chrome.runtime.lastError) {
         resolve(null);
         return;
       }
-      if (!redirectUrl) {
-        resolve(null);
-        return;
-      }
-      const hash = redirectUrl.split('#')[1];
-      if (!hash) {
-        resolve(null);
-        return;
-      }
-      const params = new URLSearchParams(hash);
-      if (params.get('error')) {
-        resolve(null);
-        return;
-      }
-      const token = params.get('access_token');
       resolve(token || null);
     });
   });

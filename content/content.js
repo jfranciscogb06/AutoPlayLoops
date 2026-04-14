@@ -8,13 +8,34 @@ let barProgressInterval = null;
 let panelOpen = false;
 const BAR_HIDDEN_KEY = 'aplBarHidden';
 
+// Walk up from [role="search"] to find the nearest flex-container ancestor
+// that has multiple visible children (the actual header row).
+// Returns { row, searchChild } or null.
+function findHeaderInsertPoint() {
+  const search = document.querySelector('[role="search"]');
+  if (!search) return null;
+  let el = search.parentElement;
+  for (let i = 0; i < 10 && el && el !== document.body; i++) {
+    const display = window.getComputedStyle(el).display;
+    if (display === 'flex' || display === 'inline-flex') {
+      const kids = Array.from(el.children).filter((c) => c.offsetWidth > 10);
+      if (kids.length >= 2) {
+        const sc = kids.find((k) => k === search || k.contains(search));
+        if (sc) return { row: el, searchChild: sc };
+      }
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function createTab(panel) {
   const tab = document.createElement('div');
   tab.className = 'apl-root apl-tab';
   tab.innerHTML = `
     <div class="apl-bar-signed-out" id="aplBarSignedOut" style="display:flex">
-      <span class="apl-bar-signin-text">Sign in to start</span>
       <button class="apl-bar-btn apl-bar-signin" id="aplBarSignIn">Sign in</button>
+      <button class="apl-bar-btn apl-bar-hide" id="aplBarHideSignedOut" title="Hide bar">−</button>
     </div>
     <div class="apl-bar-signed-in" id="aplBarSignedIn" style="display:none">
       <button class="apl-bar-btn apl-bar-prev" id="aplBarPrev" title="Previous">◀</button>
@@ -27,13 +48,6 @@ function createTab(panel) {
       <div class="apl-bar-progress"><div class="apl-bar-progress-fill" id="aplBarProgressFill"></div></div>
     </div>
   `;
-  tab.addEventListener('click', (e) => {
-    if (!e.target.closest('.apl-bar-btn') && !e.target.closest('.apl-bar-signin') && panel) {
-      panelOpen = !panelOpen;
-      panel.style.display = panelOpen ? 'block' : 'none';
-      if (panelOpen) getState().then(updatePanel);
-    }
-  });
   return tab;
 }
 
@@ -222,9 +236,9 @@ function shortenSearchBar() {
   const style = document.createElement('style');
   style.id = 'apl-search-bar-style';
   style.textContent = `
-    [role="search"] { max-width: 420px !important; }
+    [role="search"] { max-width: 260px !important; }
     [role="search"] input { max-width: 100% !important; }
-    input[aria-label*="Search"], input[placeholder*="Search"] { max-width: 420px !important; }
+    input[aria-label*="Search"], input[placeholder*="Search"] { max-width: 260px !important; }
   `;
   if (!document.getElementById('apl-search-bar-style')) {
     document.head.appendChild(style);
@@ -233,12 +247,12 @@ function shortenSearchBar() {
 
 function inject() {
   if (document.getElementById('apl-container')) return;
-
-  shortenSearchBar();
+  // Don't commit until Gmail's search bar is present — otherwise we'd
+  // incorrectly fall back to the bottom bar on a timing race.
+  if (!document.querySelector('[role="search"]')) return;
 
   const container = document.createElement('div');
   container.id = 'apl-container';
-  container.style.cssText = 'display:inline-flex;align-items:center;width:min(480px,26vw);min-width:0;max-width:min(480px,26vw);flex-shrink:0;box-sizing:border-box;';
 
   const panel = createPanel();
   const tab = createTab(panel);
@@ -254,21 +268,26 @@ function inject() {
   document.body.appendChild(panel);
   document.body.appendChild(showBtn);
 
+
   function applyPosition() {
-    container.style.position = 'fixed';
-    container.style.top = '8px';
-    container.style.right = '240px';
-    container.style.left = 'auto';
-    container.style.width = 'min(480px, 26vw)';
-    container.style.transform = '';
-    container.style.zIndex = '2147483647';
-    container.style.marginLeft = '0';
-    container.style.marginRight = '0';
-    document.body.appendChild(container);
-    showBtn.style.position = 'fixed';
-    showBtn.style.top = '8px';
-    showBtn.style.right = '360px';
-    showBtn.style.zIndex = '2147483647';
+    const pt = findHeaderInsertPoint();
+    if (!pt) return; // not ready yet — retry loop will try again
+    try {
+      container.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'flex-shrink:0',
+        'min-width:0',
+        'width:380px',
+        'box-sizing:border-box',
+        'margin:0 4px',
+      ].join(';');
+      pt.row.insertBefore(container, pt.searchChild.nextSibling || null);
+      showBtn.style.cssText = 'display:none;flex-shrink:0;margin:0 2px;';
+      pt.row.insertBefore(showBtn, container);
+    } catch (e) {
+      // injection failed — container not placed, retry loop will try again
+    }
   }
 
   function setBarVisible(visible) {
@@ -300,11 +319,13 @@ function inject() {
 
   chrome.runtime.sendMessage({ type: 'REFRESH_SUBSCRIPTION' }).catch(() => {});
 
-  tab.querySelector('#aplBarHide')?.addEventListener('click', (e) => {
+  const hideHandler = (e) => {
     e.stopPropagation();
     setBarVisible(false);
     chrome.storage.local.set({ [BAR_HIDDEN_KEY]: true });
-  });
+  };
+  tab.querySelector('#aplBarHide')?.addEventListener('click', hideHandler);
+  tab.querySelector('#aplBarHideSignedOut')?.addEventListener('click', hideHandler);
 
   showBtn.addEventListener('click', () => {
     setBarVisible(true);
@@ -340,6 +361,7 @@ function inject() {
     if (scrollRefreshTimeout) clearTimeout(scrollRefreshTimeout);
     scrollRefreshTimeout = setTimeout(() => {
       scrollRefreshTimeout = null;
+      if (isThreadView()) return;
       const visible = getVisibleIds();
       const ids = visible?.threadIds ?? visible?.messageIds;
       if (!ids || ids.length === 0) return;
@@ -408,10 +430,6 @@ function getSearchQueryFromHash() {
   }
 }
 
-function getGmailSearchFromUrl() {
-  return getSearchQueryFromHash();
-}
-
 function getSearchHash() {
   const hash = window.location.hash || '';
   const match = hash.match(/#search\/(.+?)(?:\/|$)/);
@@ -426,6 +444,12 @@ function normalizeSearchForCompare(hash) {
   } catch {
     return hash;
   }
+}
+
+/** True when viewing a single email thread (e.g. #inbox/FMfcg... or #search/query/FMfcg...) */
+function isThreadView() {
+  const hash = window.location.hash || '';
+  return /\/[A-Za-z0-9_-]{12,}$/.test(hash);
 }
 
 const EMAIL_LIST_TOP = 140;
@@ -484,7 +508,7 @@ function refreshQueueWithSearch() {
   if (refreshQueueTimeout) clearTimeout(refreshQueueTimeout);
   refreshQueueTimeout = setTimeout(() => {
     refreshQueueTimeout = null;
-    const searchQuery = getGmailSearchFromUrl();
+    const searchQuery = getSearchQueryFromHash();
     const visible = getVisibleIds();
     const visibleThreadIds = visible?.threadIds ?? null;
     const visibleMessageIds = visible?.messageIds ?? null;
@@ -633,6 +657,23 @@ function updateBar(tab, state) {
   }
 }
 
+function showRefreshPrompt() {
+  if (document.getElementById('apl-refresh-prompt')) return;
+  const banner = document.createElement('div');
+  banner.id = 'apl-refresh-prompt';
+  banner.className = 'apl-refresh-prompt';
+  banner.innerHTML = `
+    <span class="apl-refresh-prompt-text">Signed in! Refresh this page to load LoopMail.</span>
+    <button class="apl-refresh-prompt-btn" type="button">Refresh</button>
+    <button class="apl-refresh-prompt-dismiss" type="button" aria-label="Dismiss">×</button>
+  `;
+  const btn = banner.querySelector('.apl-refresh-prompt-btn');
+  const dismiss = banner.querySelector('.apl-refresh-prompt-dismiss');
+  btn.addEventListener('click', () => location.reload());
+  dismiss.addEventListener('click', () => banner.remove());
+  document.body.appendChild(banner);
+}
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'STATE_UPDATE') {
     const tab = document.querySelector('.apl-tab');
@@ -642,6 +683,8 @@ chrome.runtime.onMessage.addListener((msg) => {
       refreshQueueWithSearch();
       startSearchPolling();
     }
+  } else if (msg.type === 'SHOW_REFRESH_PROMPT') {
+    showRefreshPrompt();
   }
 });
 
@@ -663,7 +706,8 @@ function tryInject() {
   if (document.getElementById('apl-container')) return true;
   if (!document.body) return false;
   inject();
-  return true;
+  // Return true only if injection actually committed (container now in DOM)
+  return !!document.getElementById('apl-container');
 }
 
 if (document.readyState === 'loading') {

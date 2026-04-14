@@ -3,11 +3,7 @@
  * Shows connected accounts, disconnect, reset cache, sign-in
  */
 
-const API_BASE = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://autoplayloops.onrender.com/api';
-const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/userinfo.email',
-].join(' ');
+const API_BASE = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://getloopmail.com/api';
 
 const signedOutView = document.getElementById('signedOutView');
 const signedInView = document.getElementById('signedInView');
@@ -35,46 +31,64 @@ async function loadSignedInView() {
   document.getElementById('switchGmailBtn').textContent = hasGmail ? 'Switch' : 'Connect';
 }
 
-function getToken() {
-  const clientId = typeof LOOPMAIL_WEB_OAUTH_CLIENT_ID !== 'undefined' && LOOPMAIL_WEB_OAUTH_CLIENT_ID
-    ? LOOPMAIL_WEB_OAUTH_CLIENT_ID
-    : chrome.runtime.getManifest().oauth2?.client_id;
-  if (!clientId) return Promise.resolve(null);
-
-  const redirectUri = chrome.identity.getRedirectURL();
-  const authUrl = [
-    'https://accounts.google.com/o/oauth2/v2/auth',
-    `?client_id=${encodeURIComponent(clientId)}`,
-    `&redirect_uri=${encodeURIComponent(redirectUri)}`,
-    '&response_type=token',
-    `&scope=${encodeURIComponent(SCOPES)}`,
-    '&prompt=select_account',
-  ].join('');
-
+// Returns a list of Chrome accounts, or [] if unavailable.
+// chrome.identity.getAccounts is only available on Chrome OS; on other
+// platforms the function doesn't exist, so we fall back to [].
+function getAccounts() {
+  if (typeof chrome.identity.getAccounts !== 'function') {
+    return Promise.resolve([]);
+  }
   return new Promise((resolve) => {
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (redirectUrl) => {
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
-      if (!redirectUrl) {
-        resolve(null);
-        return;
-      }
-      const hash = redirectUrl.split('#')[1];
-      if (!hash) {
-        resolve(null);
-        return;
-      }
-      const params = new URLSearchParams(hash);
-      if (params.get('error')) {
-        resolve(null);
-        return;
-      }
-      const token = params.get('access_token');
+    chrome.identity.getAccounts((accounts) => {
+      if (chrome.runtime.lastError) { resolve([]); return; }
+      resolve(accounts || []);
+    });
+  });
+}
+
+// Gets an auth token for `account` (or interactively if no account given).
+function getTokenForAccount(account) {
+  return new Promise((resolve) => {
+    const opts = account
+      ? { account, interactive: true }
+      : { interactive: true };
+    chrome.identity.getAuthToken(opts, (token) => {
+      if (chrome.runtime.lastError) { resolve(null); return; }
       resolve(token || null);
     });
   });
+}
+
+// Shows an inline account-picker if multiple Chrome accounts are available,
+// otherwise returns the single account (or null for interactive fallback).
+function showAccountPicker(accounts, container) {
+  return new Promise((resolve) => {
+    if (accounts.length <= 1) { resolve(accounts[0] || null); return; }
+    container.innerHTML = '';
+    const label = document.createElement('p');
+    label.style.cssText = 'margin:0 0 8px;font-size:13px;color:var(--text-muted)';
+    label.textContent = 'Choose an account:';
+    container.appendChild(label);
+    accounts.forEach((acct) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-block';
+      btn.style.marginTop = '6px';
+      btn.textContent = acct.email || acct.id;
+      btn.addEventListener('click', () => {
+        container.innerHTML = '';
+        resolve(acct);
+      });
+      container.appendChild(btn);
+    });
+  });
+}
+
+async function getToken(pickerContainer) {
+  const accounts = await getAccounts();
+  // Remove stale tokens so the selected account gets a fresh grant.
+  await new Promise((resolve) => chrome.identity.clearAllCachedAuthTokens(resolve));
+  const account = await showAccountPicker(accounts, pickerContainer || document.createElement('div'));
+  return getTokenForAccount(account);
 }
 
 async function checkSubscription(token) {
@@ -98,20 +112,13 @@ async function checkSubscription(token) {
   }
 }
 
-function doSignOut() {
-  chrome.identity.clearAllCachedAuthTokens(() => {
-    chrome.runtime.sendMessage({ type: 'SIGN_OUT' }, () => {
-      showView(false);
-    });
-  });
-}
-
 async function doConnectGmail() {
   const status = document.getElementById('switchStatus');
-  status.textContent = 'Opening Google sign-in...';
+  status.textContent = 'Choose an account below or waiting for sign-in...';
   status.className = 'status signing-in';
   status.style.display = 'block';
-  const token = await getToken();
+  const picker = document.getElementById('accountPickerContainerSwitch');
+  const token = await getToken(picker);
   status.style.display = 'none';
   if (token) {
     chrome.runtime.sendMessage({ type: 'SET_GMAIL_TOKEN', token });
@@ -154,7 +161,7 @@ document.getElementById('signInBtn').addEventListener('click', async () => {
 
   let token;
   try {
-    token = await getToken();
+    token = await getToken(document.getElementById('accountPickerContainerSignIn'));
   } catch (e) {
     status.textContent = e.message || 'Sign-in failed';
     status.className = 'status error';

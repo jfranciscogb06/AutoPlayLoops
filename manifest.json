@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "LoopMail",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Play audio loops from your Gmail inbox - 10 seconds each, perfect for music producers",
   "permissions": [
     "identity",
+    "identity.email",
     "storage",
     "offscreen",
     "tabs",
@@ -16,7 +17,7 @@
     "https://oauth2.googleapis.com/*",
     "https://accounts.google.com/*",
     "https://mail.google.com/*",
-    "https://autoplayloops.onrender.com/*"
+    "https://getloopmail.com/*"
   ],
   "oauth2": {
     "client_id": "293425920424-b4ufdr9gdf78mj6pkpt9rt2njjf5gu2t.apps.googleusercontent.com",
