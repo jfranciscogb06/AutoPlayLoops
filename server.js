@@ -289,6 +289,38 @@ app.post('/api/auth/signin', async (req, res) => {
   }
 });
 
+// POST /api/billing-portal — returns a Stripe Customer Portal URL for the token's customer
+app.post('/api/billing-portal', async (req, res) => {
+  try {
+    if (!assertStripeReady(res)) return;
+    const { token } = req.body || {};
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Missing token' });
+    }
+
+    let email;
+    if (isLoopmailToken(token)) {
+      const payload = verifyLoopmailToken(token);
+      if (!payload) return res.status(401).json({ error: 'Token expired. Please sign in again.' });
+      email = payload.email;
+    } else {
+      ({ email } = await verifyGoogleToken(token));
+    }
+
+    const customer = await findCustomerByEmail(email);
+    if (!customer) return res.status(404).json({ error: 'No subscription found for this account.' });
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customer.id,
+      return_url: getBaseUrl(),
+    });
+    return res.status(200).json({ url: session.url });
+  } catch (err) {
+    console.error('Billing portal error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to open billing portal' });
+  }
+});
+
 // Explicit privacy policy (required for Chrome Web Store)
 app.get('/privacy.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'website', 'privacy.html'));
