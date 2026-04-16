@@ -262,6 +262,86 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
+// POST /api/auth/forgot — send a 6-digit reset code
+app.post('/api/auth/forgot', async (req, res) => {
+  try {
+    if (!assertStripeReady(res)) return;
+    const { email } = req.body || {};
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Please enter a valid email.' });
+
+    const normalized = email.trim().toLowerCase();
+    const customer = await findCustomerByEmail(normalized);
+    if (!customer || !customer.metadata?.password_hash) {
+      return res.status(200).json({ sent: true });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const exp = Math.floor(Date.now() / 1000) + 600; // 10 minutes
+    await stripe.customers.update(customer.id, {
+      metadata: { ...customer.metadata, reset_code: code, reset_code_exp: String(exp) },
+    });
+
+    const resendKey = (process.env.RESEND_API_KEY || '').trim();
+    if (resendKey) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'LoopMail <noreply@getloopmail.com>',
+          to: [normalized],
+          subject: 'Your LoopMail password reset code',
+          text: `Your reset code is: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, ignore this email.`,
+        }),
+      });
+    } else {
+      console.log(`[RESET CODE] ${normalized}: ${code} (no RESEND_API_KEY — email not sent)`);
+    }
+
+    return res.status(200).json({ sent: true });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ error: 'Something went wrong. Try again.' });
+  }
+});
+
+// POST /api/auth/reset — verify code and set new password
+app.post('/api/auth/reset', async (req, res) => {
+  try {
+    if (!assertStripeReady(res)) return;
+    const { email, code, password } = req.body || {};
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Invalid email.' });
+    if (typeof code !== 'string' || code.length !== 6) return res.status(400).json({ error: 'Invalid code.' });
+    if (!isValidPassword(password)) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+    const normalized = email.trim().toLowerCase();
+    const customer = await findCustomerByEmail(normalized);
+    if (!customer) return res.status(400).json({ error: 'Invalid code or email.' });
+
+    const stored = customer.metadata || {};
+    if (!stored.reset_code || stored.reset_code !== code) {
+      return res.status(400).json({ error: 'Invalid code.' });
+    }
+    if (Number(stored.reset_code_exp || 0) < Math.floor(Date.now() / 1000)) {
+      return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+    }
+
+    const password_hash = hashPassword(password);
+    await stripe.customers.update(customer.id, {
+      metadata: { ...stored, password_hash, reset_code: '', reset_code_exp: '' },
+    });
+
+    const token = signToken(normalized);
+    if (await hasActiveSub(customer.id)) {
+      return res.status(200).json({ subscribed: true, token });
+    }
+    const checkoutUrl = await createCheckoutSession(customer.id, normalized);
+    return res.status(200).json({ needsPayment: true, checkoutUrl });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ error: 'Something went wrong. Try again.' });
+  }
+});
+
 // POST /api/auth/signin — email + password
 app.post('/api/auth/signin', async (req, res) => {
   try {
