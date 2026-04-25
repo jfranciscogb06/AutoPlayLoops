@@ -235,6 +235,213 @@ body {
   background: var(--accent-hover);
 }
 
+/* Onboarding modal */
+.onboard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.2s ease;
+}
+
+.onboard-overlay[hidden] { display: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.onboard-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 400px;
+  width: 100%;
+  position: relative;
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.onboard-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.onboard-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.onboard-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 24px;
+  padding-right: 24px;
+}
+
+.onboard-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.onboard-step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.onboard-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.onboard-step strong {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.onboard-step p {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.onboard-cta {
+  display: block;
+  text-align: center;
+  padding: 13px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.onboard-cta:hover {
+  background: var(--accent-hover);
+}
+
+/* Demo bar tooltip */
+.demo-tooltip {
+  position: fixed;
+  z-index: 500;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px 10px;
+  width: 200px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+}
+
+.demo-tooltip[hidden] { display: none; }
+
+.demo-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 9px;
+  height: 9px;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.demo-tooltip-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.demo-tooltip-dismiss:hover { color: var(--text); }
+
+.demo-tooltip-text {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  color: var(--text);
+  padding-right: 12px;
+}
+
+.demo-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.demo-tooltip-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.demo-tooltip-next {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.demo-tooltip-next:hover { color: var(--accent-hover); }
+
+.apl-demo-tab .tip-active {
+  background: rgba(232, 168, 56, 0.18) !important;
+  color: var(--accent) !important;
+  border-radius: 6px;
+}
+
+.apl-demo-tab .tip-active .apl-bar-icon {
+  fill: var(--accent) !important;
+}
+
 /* Footer */
 .footer {
   padding: 24px;

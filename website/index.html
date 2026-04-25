@@ -19,7 +19,7 @@
         <img src="assets/icon128.png" alt="" class="logo-icon">
         <span class="logo-text">LoopMail</span>
       </div>
-      <a href="https://chromewebstore.google.com/" class="cta-header" target="_blank" rel="noopener">Add to Chrome</a>
+      <a href="https://chromewebstore.google.com/detail/loopmail/lpjcmlggiglipgioddofmpicipnbbkoe?authuser=0&hl=en" class="cta-header" target="_blank" rel="noopener">Add to Chrome</a>
     </div>
   </header>
 
@@ -34,10 +34,10 @@
           <button class="apl-bar-btn apl-bar-next" id="demoNext" title="Next">▶</button>
           <span class="apl-bar-label" id="demoLabel"><span class="apl-bar-label-inner">here is where your sample would be</span></span>
           <button class="apl-bar-btn apl-bar-shuffle" id="demoShuffle" title="Shuffle"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
-          <a class="apl-bar-btn apl-bar-download" id="demoDownload" href="https://chromewebstore.google.com/" target="_blank" rel="noopener" title="Get LoopMail"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
+          <a class="apl-bar-btn apl-bar-download" id="demoDownload" href="https://chromewebstore.google.com/detail/loopmail/lpjcmlggiglipgioddofmpicipnbbkoe?authuser=0&hl=en" target="_blank" rel="noopener" title="Get LoopMail"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
         </div>
       </div>
-      <a href="https://chromewebstore.google.com/" class="cta-primary" target="_blank" rel="noopener">Install for Chrome</a>
+      <a href="https://chromewebstore.google.com/detail/loopmail/lpjcmlggiglipgioddofmpicipnbbkoe?authuser=0&hl=en" class="cta-primary" target="_blank" rel="noopener">Install for Chrome</a>
       <p class="hero-note">Free for 1 week, then just $4.99/month</p>
     </section>
 
@@ -76,7 +76,7 @@
     <section class="cta-section">
       <h2 class="cta-title">Clear your backlog in seconds</h2>
       <p class="cta-pricing">Free for 1 week, then just $4.99/month</p>
-      <a href="https://chromewebstore.google.com/" class="cta-secondary" target="_blank" rel="noopener">Get LoopMail</a>
+      <a href="https://chromewebstore.google.com/detail/loopmail/lpjcmlggiglipgioddofmpicipnbbkoe?authuser=0&hl=en" class="cta-secondary" target="_blank" rel="noopener">Get LoopMail</a>
     </section>
   </main>
 
@@ -84,5 +84,47 @@
     <p>LoopMail — Chrome extension for Gmail · <a href="mailto:1traptsoul@gmail.com" style="color:var(--accent);text-decoration:none;">Contact</a></p>
   </footer>
   <script src="demo.js"></script>
+
+  <div id="onboardModal" class="onboard-overlay" hidden>
+    <div class="onboard-card">
+      <button class="onboard-close" id="onboardClose" aria-label="Close">✕</button>
+      <h2 class="onboard-title">You're one step away</h2>
+      <ol class="onboard-steps">
+        <li class="onboard-step">
+          <span class="onboard-num">1</span>
+          <div>
+            <strong>Install LoopMail</strong>
+            <p>Add the extension from the Chrome Web Store</p>
+          </div>
+        </li>
+        <li class="onboard-step">
+          <span class="onboard-num">2</span>
+          <div>
+            <strong>Open Gmail</strong>
+            <p>The player bar appears automatically at the top of your inbox</p>
+          </div>
+        </li>
+        <li class="onboard-step">
+          <span class="onboard-num">3</span>
+          <div>
+            <strong>Press play</strong>
+            <p>LoopMail finds your loops and starts cycling through them</p>
+          </div>
+        </li>
+      </ol>
+      <a href="https://chromewebstore.google.com/detail/loopmail/lpjcmlggiglipgioddofmpicipnbbkoe?authuser=0&hl=en" class="onboard-cta" target="_blank" rel="noopener">Add to Chrome →</a>
+    </div>
+  </div>
+
+  <div id="demoTooltip" class="demo-tooltip" hidden>
+    <button class="demo-tooltip-dismiss" id="demoTooltipClose" aria-label="Dismiss">✕</button>
+    <p class="demo-tooltip-text" id="demoTooltipText"></p>
+    <div class="demo-tooltip-footer">
+      <span class="demo-tooltip-count" id="demoTooltipCount"></span>
+      <button class="demo-tooltip-next" id="demoTooltipNext">Next →</button>
+    </div>
+  </div>
+
+  <script src="onboarding.js"></script>
 </body>
 </html>
