@@ -27,13 +27,15 @@
 .apl-bar-signin {
   padding: 6px 18px;
   font-size: 13px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.2);
+  font-weight: var(--apl-tab-weight, 500);
+  color: inherit;
+  background: transparent;
   border-radius: 16px;
+  letter-spacing: normal;
 }
 
 .apl-bar-signin:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(127, 127, 127, 0.18);
 }
 
 .apl-tab {
@@ -47,19 +49,18 @@
   height: 48px;
   padding: 0 12px;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--apl-tab-bg, rgba(255, 255, 255, 0.12));
   border: none;
   border-radius: 24px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--apl-tab-ink, rgba(255, 255, 255, 0.9));
   font-size: 14px;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition: filter 0.15s, box-shadow 0.15s;
   box-shadow: none;
   overflow: hidden;
   contain: layout size;
 }
+
 
 .apl-bar-progress {
   position: absolute;
@@ -75,27 +76,23 @@
 .apl-bar-progress-fill {
   height: 100%;
   width: 0%;
-  background: rgba(255, 255, 255, 0.8);
+  background: currentColor;
+  opacity: 0.8;
   border-radius: 0 0 0 24px;
   transition: width 0.05s linear;
 }
-
-.apl-tab:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-
 
 .apl-tab svg {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  fill: rgba(255, 255, 255, 0.9);
+  fill: currentColor;
 }
 
 .apl-bar-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.9);
+  color: inherit;
   cursor: pointer;
   padding: 2px 2px;
   font-size: 12px;
@@ -109,7 +106,7 @@
 }
 
 .apl-bar-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(127, 127, 127, 0.18);
 }
 
 .apl-bar-prev {
@@ -118,15 +115,21 @@
 
 .apl-bar-play {
   font-size: 14px;
-  padding: 2px 4px;
+  padding: 0;
   margin-right: -4px;
   min-width: 28px;
   min-height: 28px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
+  line-height: 1;
 }
 
 .apl-bar-play.playing {
-  font-size: 24px;
+  font-size: 14px;
 }
 
 .apl-bar-next {
@@ -154,27 +157,24 @@
 
 .apl-bar-shuffle {
   padding: 4px;
-  color: rgba(255, 255, 255, 0.4);
   margin-left: -14px;
+  opacity: 0.4;
+  color: inherit;
 }
 
 .apl-bar-shuffle .apl-bar-icon {
   display: block;
   width: 18px;
   height: 18px;
-  fill: rgba(255, 255, 255, 0.4);
+  fill: currentColor;
 }
 
 .apl-bar-shuffle:hover {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.apl-bar-shuffle:hover .apl-bar-icon {
-  fill: rgba(255, 255, 255, 0.7);
+  opacity: 0.7;
 }
 
 .apl-bar-shuffle.active {
-  color: #fff;
+  opacity: 1;
 }
 
 .apl-bar-shuffle.active .apl-bar-icon {
@@ -211,22 +211,20 @@
   font-family: 'Google Sans', Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  color: var(--apl-tab-ink, rgba(255, 255, 255, 0.9));
+  background: var(--apl-tab-bg, rgba(255, 255, 255, 0.15));
   border: none;
   border-radius: 50%;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.15s;
+  transition: filter 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .apl-show-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
+  filter: brightness(1.08);
 }
 
 .apl-panel {
@@ -491,3 +489,87 @@
 .apl-refresh-prompt-dismiss:hover {
   color: #fff;
 }
+
+/* First-time walkthrough tooltip */
+.apl-walkthrough-tooltip {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 12px 14px 10px;
+  width: 200px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  font-family: 'Google Sans', Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
+  display: none;
+  pointer-events: auto;
+}
+
+.apl-walkthrough-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 9px;
+  height: 9px;
+  background: #1e1e2e;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.apl-wt-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.apl-wt-close:hover { color: rgba(255, 255, 255, 0.8); }
+
+.apl-wt-text {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.9);
+  padding-right: 12px;
+}
+
+.apl-wt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.apl-wt-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.apl-wt-next {
+  background: none;
+  border: none;
+  color: #e8a838;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.apl-wt-next:hover { color: #f0b84d; }
+
+.apl-tab .apl-wt-active {
+  background: rgba(232, 168, 56, 0.25) !important;
+  border-radius: 4px;
+  opacity: 1 !important;
+}
+

@@ -11,6 +11,67 @@ const BAR_HIDDEN_KEY = 'aplBarHidden';
 // Walk up from [role="search"] to find the nearest flex-container ancestor
 // that has multiple visible children (the actual header row).
 // Returns { row, searchChild } or null.
+function parseRgb(str) {
+  const m = str && str.match(/rgba?\(([^)]+)\)/);
+  if (!m) return null;
+  const parts = m[1].split(',').map((s) => parseFloat(s.trim()));
+  const [r, g, b, a = 1] = parts;
+  return { r, g, b, a };
+}
+
+function sampleSearchBarStyle(searchEl) {
+  const input = document.querySelector('input[name="q"]')
+    || searchEl.querySelector('input')
+    || searchEl.querySelector('[contenteditable]');
+  if (!input) return null;
+
+  const inputStyle = window.getComputedStyle(input);
+
+  // Find the pill: walk up from input looking for an element with a pill-shape
+  // (large border-radius) AND a visible bg. That element is the visual container.
+  let bg = null;
+  let backdrop = null;
+  let node = input;
+  for (let i = 0; i < 12 && node && searchEl.contains(node); i++) {
+    const cs = window.getComputedStyle(node);
+    const br = parseFloat(cs.borderTopLeftRadius) || 0;
+    const rgb = parseRgb(cs.backgroundColor);
+    const hasPillBg = rgb && rgb.a > 0.05;
+    if (br >= 12 && hasPillBg) {
+      bg = cs.backgroundColor;
+      const bd = cs.backdropFilter || cs.webkitBackdropFilter;
+      if (bd && bd !== 'none') backdrop = bd;
+      break;
+    }
+    node = node.parentElement;
+  }
+  // Fallback: input's own bg if no pill-shaped ancestor was found.
+  if (!bg) {
+    const rgb = parseRgb(inputStyle.backgroundColor);
+    if (rgb && rgb.a > 0.05) bg = inputStyle.backgroundColor;
+  }
+
+  let isLight = false;
+  const bgRgb = bg ? parseRgb(bg) : null;
+  if (bgRgb) {
+    const lum = (0.299 * bgRgb.r + 0.587 * bgRgb.g + 0.114 * bgRgb.b) / 255;
+    isLight = lum > 0.6;
+  }
+
+  return {
+    bg,
+    backdrop,
+    isLight,
+    color: inputStyle.color,
+    fontWeight: inputStyle.fontWeight,
+  };
+}
+
+function applyThemeClass(el, isLight) {
+  el.classList.toggle('apl-theme-light', isLight);
+  el.classList.toggle('apl-theme-dark', !isLight);
+}
+
 function findHeaderInsertPoint() {
   const search = document.querySelector('[role="search"]');
   if (!search) return null;
@@ -34,12 +95,12 @@ function createTab(panel) {
   tab.className = 'apl-root apl-tab';
   tab.innerHTML = `
     <div class="apl-bar-signed-out" id="aplBarSignedOut" style="display:flex">
-      <button class="apl-bar-btn apl-bar-signin" id="aplBarSignIn">Sign in</button>
+      <button class="apl-bar-btn apl-bar-signin" id="aplBarSignIn">Sign in to LoopMail</button>
       <button class="apl-bar-btn apl-bar-hide" id="aplBarHideSignedOut" title="Hide bar">−</button>
     </div>
     <div class="apl-bar-signed-in" id="aplBarSignedIn" style="display:none">
       <button class="apl-bar-btn apl-bar-prev" id="aplBarPrev" title="Previous">◀</button>
-      <button class="apl-bar-btn apl-bar-play" id="aplBarPlay" title="Play">▶</button>
+      <button class="apl-bar-btn apl-bar-play" id="aplBarPlay" title="Play"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg></button>
       <button class="apl-bar-btn apl-bar-next" id="aplBarNext" title="Next">▶</button>
       <span class="apl-bar-label" id="aplBarLabel"><span class="apl-bar-label-inner">Loops</span></span>
       <button class="apl-bar-btn apl-bar-shuffle" id="aplBarShuffle" title="Shuffle"><svg class="apl-bar-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
@@ -190,7 +251,9 @@ function updatePanel(state) {
   if (loopName) loopName.textContent = state.currentLoop?.filename || state.currentLoop?.subject || '—';
   if (queueInfo) queueInfo.textContent = `Loop ${state.currentIndex + 1} of ${state.queue.length}`;
   if (playBtn) {
-    playBtn.textContent = state.isPlaying ? '⏸' : '▶';
+    playBtn.innerHTML = state.isPlaying
+  ? '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+  : '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>';
     playBtn.classList.toggle('playing', state.isPlaying);
   }
   if (shuffleBtn) shuffleBtn.classList.toggle('active', state.shuffleOn);
@@ -269,6 +332,30 @@ function inject() {
   document.body.appendChild(showBtn);
 
 
+  function applySearchTheme(searchChild) {
+    const sampled = sampleSearchBarStyle(searchChild);
+    if (!sampled) return;
+    if (sampled.bg) {
+      tab.style.setProperty('--apl-tab-bg', sampled.bg);
+      showBtn.style.setProperty('--apl-tab-bg', sampled.bg);
+    }
+    if (sampled.color) {
+      tab.style.setProperty('--apl-tab-ink', sampled.color);
+      showBtn.style.setProperty('--apl-tab-ink', sampled.color);
+    }
+    if (sampled.fontWeight) {
+      tab.style.setProperty('--apl-tab-weight', sampled.fontWeight);
+    }
+    if (sampled.backdrop) {
+      tab.style.setProperty('backdrop-filter', sampled.backdrop);
+      tab.style.setProperty('-webkit-backdrop-filter', sampled.backdrop);
+      showBtn.style.setProperty('backdrop-filter', sampled.backdrop);
+      showBtn.style.setProperty('-webkit-backdrop-filter', sampled.backdrop);
+    }
+    applyThemeClass(tab, sampled.isLight);
+    applyThemeClass(showBtn, sampled.isLight);
+  }
+
   function applyPosition() {
     const pt = findHeaderInsertPoint();
     if (!pt) return; // not ready yet — retry loop will try again
@@ -285,6 +372,10 @@ function inject() {
       pt.row.insertBefore(container, pt.searchChild.nextSibling || null);
       showBtn.style.cssText = 'display:none;flex-shrink:0;margin:0 2px;';
       pt.row.insertBefore(showBtn, container);
+      applySearchTheme(pt.searchChild);
+      // Gmail themes load async — re-sample after DOM settles.
+      setTimeout(() => applySearchTheme(pt.searchChild), 800);
+      setTimeout(() => applySearchTheme(pt.searchChild), 2500);
     } catch (e) {
       // injection failed — container not placed, retry loop will try again
     }
@@ -314,6 +405,7 @@ function inject() {
         refreshQueueWithSearch();
         startSearchPolling();
       }
+      if (s?.hasToken) setTimeout(startWalkthrough, 800);
     });
   });
 
@@ -682,6 +774,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (msg.payload?.hasToken && !searchPollInterval) {
       refreshQueueWithSearch();
       startSearchPolling();
+      setTimeout(startWalkthrough, 800);
     }
   } else if (msg.type === 'SHOW_REFRESH_PROMPT') {
     showRefreshPrompt();
@@ -727,3 +820,69 @@ const retryInterval = setInterval(() => {
   retries++;
   if (tryInject() || retries > 30) clearInterval(retryInterval);
 }, 1500);
+
+// ── First-time walkthrough ──
+const WALKTHROUGH_DONE_KEY = 'walkthroughDone';
+const WALKTHROUGH_TIPS = [
+  { id: 'aplBarPlay',     text: 'Hit play to start cycling through your loops' },
+  { id: 'aplBarNext',     text: 'Skip to the next loop in your queue' },
+  { id: 'aplBarShuffle',  text: 'Shuffle your queue for a random order' },
+  { id: 'aplBarDownload', text: 'One-click save — grab anything that hits' },
+];
+
+let wtTooltip = null;
+let wtIndex = 0;
+let walkthroughAttempted = false;
+
+function positionWtTooltip() {
+  if (!wtTooltip) return;
+  const target = document.getElementById(WALKTHROUGH_TIPS[wtIndex].id);
+  if (!target) return;
+  const tr = target.getBoundingClientRect();
+  const tt = wtTooltip.getBoundingClientRect();
+  wtTooltip.style.left = (tr.left + tr.width / 2) + 'px';
+  wtTooltip.style.top = (tr.bottom + 12) + 'px';
+}
+
+function showWtTip(index) {
+  if (!wtTooltip || index >= WALKTHROUGH_TIPS.length) { finishWalkthrough(); return; }
+  wtIndex = index;
+  WALKTHROUGH_TIPS.forEach((t) => document.getElementById(t.id)?.classList.remove('apl-wt-active'));
+  document.getElementById(WALKTHROUGH_TIPS[index].id)?.classList.add('apl-wt-active');
+  wtTooltip.querySelector('.apl-wt-text').textContent = WALKTHROUGH_TIPS[index].text;
+  wtTooltip.querySelector('.apl-wt-count').textContent = (index + 1) + ' / ' + WALKTHROUGH_TIPS.length;
+  wtTooltip.querySelector('.apl-wt-next').textContent = index < WALKTHROUGH_TIPS.length - 1 ? 'Next →' : 'Done';
+  wtTooltip.style.display = 'block';
+  requestAnimationFrame(() => requestAnimationFrame(positionWtTooltip));
+}
+
+function finishWalkthrough() {
+  if (wtTooltip) { wtTooltip.remove(); wtTooltip = null; }
+  WALKTHROUGH_TIPS.forEach((t) => document.getElementById(t.id)?.classList.remove('apl-wt-active'));
+  chrome.storage.local.set({ [WALKTHROUGH_DONE_KEY]: true });
+}
+
+function startWalkthrough() {
+  if (walkthroughAttempted) return;
+  walkthroughAttempted = true;
+  chrome.storage.local.get(WALKTHROUGH_DONE_KEY, (result) => {
+    if (result[WALKTHROUGH_DONE_KEY]) return;
+    wtTooltip = document.createElement('div');
+    wtTooltip.className = 'apl-root apl-walkthrough-tooltip';
+    wtTooltip.innerHTML = `
+      <button class="apl-wt-close" aria-label="Dismiss">✕</button>
+      <p class="apl-wt-text"></p>
+      <div class="apl-wt-footer">
+        <span class="apl-wt-count"></span>
+        <button class="apl-wt-next">Next →</button>
+      </div>
+    `;
+    document.body.appendChild(wtTooltip);
+    wtTooltip.querySelector('.apl-wt-next').addEventListener('click', () => {
+      wtIndex < WALKTHROUGH_TIPS.length - 1 ? showWtTip(wtIndex + 1) : finishWalkthrough();
+    });
+    wtTooltip.querySelector('.apl-wt-close').addEventListener('click', finishWalkthrough);
+    window.addEventListener('resize', () => { if (wtTooltip) positionWtTooltip(); });
+    showWtTip(0);
+  });
+}
