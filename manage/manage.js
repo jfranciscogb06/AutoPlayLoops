@@ -320,7 +320,7 @@ document.getElementById('manageSubscriptionBtn').addEventListener('click', async
   btn.disabled = false;
   btn.textContent = originalText;
   if (res?.url) {
-    window.open(res.url, '_blank', 'noopener');
+    window.location.href = res.url;
   } else {
     alert(res?.error || 'Failed to open billing portal.');
   }
