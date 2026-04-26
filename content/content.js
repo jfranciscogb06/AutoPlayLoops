@@ -828,7 +828,7 @@ const WALKTHROUGH_TIPS = [
   { id: 'aplBarNext',     text: 'Skip to the next loop in your queue' },
   { id: 'aplBarShuffle',  text: 'Shuffle your queue for a random order' },
   { id: 'aplBarDownload', text: 'One-click save — grab anything that hits' },
-  { selector: 'input[name="q"]', text: 'Use Gmail search to filter your loops — only emails matching the search will play' },
+  { selector: 'input[name="q"]', text: 'Use Gmail search to filter your loops. Only emails matching the search will play' },
 ];
 
 function getTipTarget(tip) {
