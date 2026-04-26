@@ -43,6 +43,11 @@
       "js": ["content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://getloopmail.com/auth/billing-return.html"],
+      "js": ["billing-return/redirect.js"],
+      "run_at": "document_start"
     }
   ],
   "icons": {
