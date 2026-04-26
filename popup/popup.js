@@ -35,7 +35,7 @@ document.getElementById('durationSelect')?.addEventListener('change', (e) => {
 
 document.getElementById('manageAccountsLink')?.addEventListener('click', (e) => {
   e.preventDefault();
-  chrome.tabs.create({ url: chrome.runtime.getURL('manage/manage.html') });
+  chrome.windows.create({ url: chrome.runtime.getURL('manage/manage.html'), type: 'popup', width: 560, height: 680, focused: true });
 });
 
 chrome.runtime.onMessage.addListener((msg) => {

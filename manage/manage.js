@@ -327,7 +327,7 @@ document.getElementById('manageSubscriptionBtn').addEventListener('click', async
 });
 
 document.getElementById('continueToGmailBtn')?.addEventListener('click', () => {
-  window.location.href = 'https://mail.google.com';
+  window.close();
 });
 
 document.getElementById('resetCacheBtn').addEventListener('click', async () => {

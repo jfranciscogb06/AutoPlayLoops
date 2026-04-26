@@ -28,7 +28,12 @@ function getTabState(tabId) {
 const tabStateMap = new Map();
 let loadQueueGeneration = 0;
 const STORAGE_LOOPMAIL_TOKEN = 'loopmail_access_token';
+const STORAGE_LOOPMAIL_EMAIL = 'loopmail_email';
 const STORAGE_GMAIL_TOKEN = 'gmail_access_token';
+
+function isLoopmailToken(token) {
+  return typeof token === 'string' && token.startsWith('lm.');
+}
 let globalState = {
   accessToken: null,
   gmailAccessToken: null,
@@ -86,6 +91,8 @@ async function verifySubscription(token) {
 async function verifyWithRetry(token) {
   let sub = await verifySubscription(token);
   if (sub.subscribed || sub.needsPayment || sub.transient) return sub;
+  // LoopMail JWTs can't be silently refreshed — user must sign in again.
+  if (isLoopmailToken(token)) return sub;
   const isAuthError = sub.error && (sub.error.includes('expired') || sub.error.includes('Invalid') || /invalid.*token|token.*invalid/i.test(sub.error));
   if (!isAuthError) return sub;
   const fresh = await getAccessToken(false);
@@ -474,13 +481,22 @@ async function goPrev(tabId) {
   }
 }
 
-function performSignOut(onDone) {
+function performSignOut(onDone, { keepGmail = false } = {}) {
   const tokenToRemove = globalState.accessToken;
+  const gmailTokenToKeep = keepGmail ? globalState.gmailAccessToken : null;
   globalState.accessToken = null;
-  globalState.gmailAccessToken = null;
   globalState.subscriptionActive = false;
   chrome.storage.local.remove(STORAGE_LOOPMAIL_TOKEN);
-  chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
+  chrome.storage.local.remove(STORAGE_LOOPMAIL_EMAIL);
+  if (!keepGmail) {
+    globalState.gmailAccessToken = null;
+    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
+  } else if (gmailTokenToKeep === tokenToRemove) {
+    // Shared token between subscription and Gmail — the revoke below would kill both.
+    // Drop the Gmail token too since it's about to be invalidated.
+    globalState.gmailAccessToken = null;
+    chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
+  }
   tabStateMap.clear();
   activeTabId = null;
   preloadCache.clear();
@@ -491,7 +507,7 @@ function performSignOut(onDone) {
   }
   chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP' }).catch(() => {});
   broadcastState();
-  if (tokenToRemove) {
+  if (tokenToRemove && !isLoopmailToken(tokenToRemove)) {
     fetch(`https://oauth2.googleapis.com/revoke?token=${tokenToRemove}`, { method: 'POST' })
       .catch(() => {})
       .finally(() => {
@@ -527,9 +543,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       let gmailEmail = null;
       try {
         if (loopmailToken) {
-          const r1 = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(loopmailToken)}`);
-          const d1 = await r1.json();
-          loopmailEmail = d1.email || null;
+          if (isLoopmailToken(loopmailToken)) {
+            const stored = await chrome.storage.local.get([STORAGE_LOOPMAIL_EMAIL]);
+            loopmailEmail = stored[STORAGE_LOOPMAIL_EMAIL] || null;
+            if (!loopmailEmail) {
+              // Fall back to decoding the JWT payload (base64url).
+              try {
+                const payload = loopmailToken.slice(3).split('.')[1];
+                const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+                loopmailEmail = json.email || null;
+              } catch (_) {}
+            }
+          } else {
+            const r1 = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(loopmailToken)}`);
+            const d1 = await r1.json();
+            loopmailEmail = d1.email || null;
+          }
         }
         if (gmailToken) {
           const r2 = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(gmailToken)}`);
@@ -571,6 +600,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'DISCONNECT_GMAIL') {
+    const tokenToRevoke = globalState.gmailAccessToken;
     globalState.gmailAccessToken = null;
     chrome.storage.local.remove(STORAGE_GMAIL_TOKEN);
     tabStateMap.forEach((s) => {
@@ -583,12 +613,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     preloadCache.clear();
     activeTabId = null;
     broadcastState();
-    sendResponse({ ok: true });
+    // Revoke + evict from Chrome's cache so getAuthToken shows the picker on reconnect.
+    if (tokenToRevoke) {
+      fetch(`https://oauth2.googleapis.com/revoke?token=${tokenToRevoke}`, { method: 'POST' }).catch(() => {});
+      chrome.identity.removeCachedAuthToken({ token: tokenToRevoke }, () => sendResponse({ ok: true }));
+    } else {
+      sendResponse({ ok: true });
+    }
     return true;
   }
 
-  if (msg.type === 'SIGN_OUT' || msg.type === 'DISCONNECT_LOOPMAIL') {
+  if (msg.type === 'SIGN_OUT') {
     performSignOut(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.type === 'DISCONNECT_LOOPMAIL') {
+    // Disconnect only the subscription — keep the separately-connected Gmail token
+    // so the user doesn't have to reconnect it after signing back in.
+    performSignOut(() => sendResponse({ ok: true }), { keepGmail: true });
     return true;
   }
 
@@ -604,13 +647,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'SIGN_IN_COMPLETE') {
+    // Only set subscription token — Gmail access is a separate explicit step.
     globalState.accessToken = msg.token;
-    globalState.gmailAccessToken = msg.token;
     globalState.subscriptionActive = true;
-    chrome.storage.local.set({
-      [STORAGE_LOOPMAIL_TOKEN]: msg.token,
-      [STORAGE_GMAIL_TOKEN]: msg.token,
-    });
+    const storageUpdate = { [STORAGE_LOOPMAIL_TOKEN]: msg.token };
+    if (msg.email) storageUpdate[STORAGE_LOOPMAIL_EMAIL] = msg.email;
+    chrome.storage.local.set(storageUpdate);
     chrome.tabs.query({ url: '*://mail.google.com/*' }, (tabs) => {
       const gmailTab = tabs.find((t) => t.active) || tabs[0];
       if (gmailTab?.id) loadQueue(gmailTab.id);
@@ -624,14 +666,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'OPEN_AUTH_TAB') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('manage/manage.html') });
+    chrome.windows.create({ url: chrome.runtime.getURL('manage/manage.html'), type: 'popup', width: 560, height: 680, focused: true });
     sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === 'OPEN_BILLING_PORTAL') {
+    (async () => {
+      const token = globalState.accessToken;
+      if (!token) { sendResponse({ error: 'Not signed in.' }); return; }
+      try {
+        const base = typeof LOOPMAIL_API_BASE !== 'undefined' ? LOOPMAIL_API_BASE : 'https://getloopmail.com/api';
+        const res = await fetch(`${base}/billing-portal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          sendResponse({ error: data.error || `Failed (${res.status})` });
+          return;
+        }
+        sendResponse({ url: data.url });
+      } catch (e) {
+        sendResponse({ error: e.message || 'Network error' });
+      }
+    })();
     return true;
   }
 
   if (msg.type === 'REFRESH_SUBSCRIPTION') {
     (async () => {
-      const token = await getAccessToken(false) || globalState.accessToken;
+      // Use the stored subscription token directly — don't replace with getAccessToken(false),
+      // which always returns the current Chrome profile account and may differ from the
+      // subscription account, causing account mixing.
+      const token = globalState.accessToken;
       if (!token) {
         sendResponse({ ok: true });
         return;
@@ -639,18 +708,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const sub = await verifyWithRetry(token);
       if (sub.refreshedToken) {
         globalState.accessToken = sub.refreshedToken;
-        globalState.gmailAccessToken = sub.refreshedToken;
-        chrome.storage.local.set({
-          [STORAGE_LOOPMAIL_TOKEN]: sub.refreshedToken,
-          [STORAGE_GMAIL_TOKEN]: sub.refreshedToken,
-        }).catch(() => {});
+        // Never overwrite a separately-connected Gmail token.
+        chrome.storage.local.set({ [STORAGE_LOOPMAIL_TOKEN]: sub.refreshedToken }).catch(() => {});
       } else {
         globalState.accessToken = token;
-        globalState.gmailAccessToken = token;
-        chrome.storage.local.set({
-          [STORAGE_LOOPMAIL_TOKEN]: token,
-          [STORAGE_GMAIL_TOKEN]: token,
-        }).catch(() => {});
+        // Never overwrite a separately-connected Gmail token.
+        chrome.storage.local.set({ [STORAGE_LOOPMAIL_TOKEN]: token }).catch(() => {});
       }
       if (sub.subscribed) {
         globalState.subscriptionActive = true;
@@ -885,13 +948,16 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 chrome.identity.onSignInChanged.addListener(async (account, signedIn) => {
   if (!signedIn) {
+    // This only applies to Google-signed-in users. Email/password users aren't
+    // affected by Chrome's identity state changes.
+    if (isLoopmailToken(globalState.accessToken)) return;
     // onSignInChanged fires spuriously during Chrome token refresh cycles.
     // Try a silent re-auth before treating this as a real sign-out.
     const freshToken = await getAccessToken(false);
     if (freshToken) {
-      // Chrome recovered a valid token — just update memory and carry on.
+      // Chrome recovered a valid token — just update subscription token and carry on.
+      // Never overwrite a separately-connected Gmail token.
       globalState.accessToken = freshToken;
-      globalState.gmailAccessToken = freshToken;
       broadcastState();
       return;
     }
@@ -925,45 +991,39 @@ loadPlayDuration().then(async () => {
   const storedLoopmail = stored[STORAGE_LOOPMAIL_TOKEN];
   const storedGmail = stored[STORAGE_GMAIL_TOKEN];
 
-  // Optimistically restore tokens from storage immediately so that any GET_STATE
-  // arriving while the subscription verification round-trip is in-flight (e.g. Render
-  // cold start after laptop sleep) returns hasToken=true instead of signing the user out.
+  // Optimistically restore the stored subscription token immediately so GET_STATE calls
+  // that arrive during the verification round-trip return hasToken=true.
+  // Do NOT replace with getAccessToken(false) here — Chrome's identity always returns
+  // the token for the current Chrome profile account, which may differ from the account
+  // the user subscribed with, causing account mixing and false sign-outs.
   if (storedLoopmail) {
-    // Get a fresh token FIRST so queue loads with a valid (non-expired) token.
-    // getAccessToken(false) uses Chrome's identity system which handles refresh silently.
-    const freshToken = await getAccessToken(false) || storedLoopmail;
-    globalState.accessToken = freshToken;
-    globalState.gmailAccessToken = freshToken;
+    globalState.accessToken = storedLoopmail;
     globalState.subscriptionActive = true;
     broadcastState();
   }
+  // Gmail token is stored separately and only set via the explicit "Give Gmail access" flow.
+  if (storedGmail) {
+    globalState.gmailAccessToken = storedGmail;
+  }
 
-  let loopmailToken = globalState.accessToken || storedLoopmail;
+  let loopmailToken = storedLoopmail;
   if (loopmailToken) {
     const sub = await verifyWithRetry(loopmailToken);
     if (sub.refreshedToken) loopmailToken = sub.refreshedToken;
     if (sub.subscribed) {
       globalState.accessToken = loopmailToken;
-      globalState.gmailAccessToken = loopmailToken;
       globalState.subscriptionActive = true;
-      chrome.storage.local.set({
-        [STORAGE_LOOPMAIL_TOKEN]: loopmailToken,
-        [STORAGE_GMAIL_TOKEN]: loopmailToken,
-      }).catch(() => {});
-    } else if (sub.transient) {
-      // Network/cold-start error — keep the optimistic state; user stays signed in.
-      globalState.accessToken = loopmailToken;
-      globalState.gmailAccessToken = storedGmail || loopmailToken;
-    } else {
-      // Definitive failure (subscription lapsed, token truly invalid) — sign out.
+      chrome.storage.local.set({ [STORAGE_LOOPMAIL_TOKEN]: loopmailToken }).catch(() => {});
+    } else if (sub.needsPayment) {
+      // Subscription explicitly lapsed — clear active flag but keep token for re-subscribe flow.
       globalState.subscriptionActive = false;
       globalState.accessToken = loopmailToken;
-      globalState.gmailAccessToken = storedGmail || loopmailToken;
-      /* Keep tokens in storage — only explicit SIGN_OUT removes them. */
+    } else {
+      // Everything else (token errors, network failures, Chrome account mismatches) —
+      // keep the user logged in optimistically. Never clear on verify failure at startup,
+      // only on explicit sign-out. Matches the REFRESH_SUBSCRIPTION handler behaviour.
+      globalState.accessToken = loopmailToken;
     }
-  }
-  if (storedGmail && !globalState.gmailAccessToken) {
-    globalState.gmailAccessToken = storedGmail;
   }
   broadcastState();
 });
