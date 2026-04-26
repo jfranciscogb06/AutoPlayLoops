@@ -44,7 +44,17 @@
 <body>
   <img src="../assets/icon128.png" alt="" class="icon" width="64" height="64">
   <h1>Subscription updated</h1>
-  <p>All good — you can close this tab and return to LoopMail.</p>
-  <button class="btn">← Back to LoopMail</button>
+  <p>All good — heading back to LoopMail now.</p>
+  <button class="btn" id="backBtn">← Back to LoopMail</button>
+  <script>
+    const EXT_ID = 'lpjcmlggiglipgioddofmpicipnbbkoe';
+    function goBack() {
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        chrome.runtime.sendMessage(EXT_ID, { type: 'BILLING_RETURN' });
+      }
+    }
+    document.getElementById('backBtn').addEventListener('click', goBack);
+    goBack();
+  </script>
 </body>
 </html>

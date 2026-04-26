@@ -1033,3 +1033,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     loadPlayDuration().then(broadcastState);
   }
 });
+
+chrome.runtime.onMessageExternal.addListener((msg, sender) => {
+  if (msg.type === 'BILLING_RETURN' && sender.tab?.id) {
+    chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL('manage/manage.html') });
+  }
+});
