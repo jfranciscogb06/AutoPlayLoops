@@ -1040,6 +1040,12 @@ chrome.runtime.onMessageExternal.addListener((msg, sender) => {
   }
 });
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url?.startsWith('https://getloopmail.com/auth/billing-return')) {
+    chrome.tabs.remove(tabId);
+  }
+});
+
 chrome.runtime.onMessageExternal.addListener((msg, sender) => {
   if (msg.type === 'BILLING_RETURN' && sender.tab?.id) {
     chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL('manage/manage.html') });
