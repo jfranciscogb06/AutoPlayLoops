@@ -1036,6 +1036,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onMessageExternal.addListener((msg, sender) => {
   if (msg.type === 'BILLING_RETURN' && sender.tab?.id) {
+    chrome.tabs.remove(sender.tab.id);
+  }
+});
+
+chrome.runtime.onMessageExternal.addListener((msg, sender) => {
+  if (msg.type === 'BILLING_RETURN' && sender.tab?.id) {
     chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL('manage/manage.html') });
   }
 });

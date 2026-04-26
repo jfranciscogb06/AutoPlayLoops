@@ -44,8 +44,11 @@
 <body>
   <img src="../assets/icon128.png" alt="" class="icon" width="64" height="64">
   <h1>Subscription updated</h1>
-  <p>All good — you can close this tab and return to LoopMail.</p>
-  <button class="btn" onclick="window.close()">Close tab</button>
-  <script>window.close();</script>
+  <p>All good — closing now.</p>
+  <script>
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      chrome.runtime.sendMessage('lpjcmlggiglipgioddofmpicipnbbkoe', { type: 'BILLING_RETURN' });
+    }
+  </script>
 </body>
 </html>
