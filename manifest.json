@@ -81,9 +81,6 @@
   "externally_connectable": {
     "matches": ["https://getloopmail.com/*"]
   },
-  "externally_connectable": {
-    "matches": ["https://getloopmail.com/*"]
-  },
   "web_accessible_resources": [
     {
       "resources": ["icons/*.png"],
