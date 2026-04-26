@@ -828,7 +828,14 @@ const WALKTHROUGH_TIPS = [
   { id: 'aplBarNext',     text: 'Skip to the next loop in your queue' },
   { id: 'aplBarShuffle',  text: 'Shuffle your queue for a random order' },
   { id: 'aplBarDownload', text: 'One-click save — grab anything that hits' },
+  { selector: 'input[name="q"]', text: 'Use Gmail search to filter your loops — only emails matching the search will play' },
 ];
+
+function getTipTarget(tip) {
+  if (tip.id) return document.getElementById(tip.id);
+  if (tip.selector) return document.querySelector(tip.selector);
+  return null;
+}
 
 let wtTooltip = null;
 let wtIndex = 0;
@@ -836,10 +843,9 @@ let walkthroughAttempted = false;
 
 function positionWtTooltip() {
   if (!wtTooltip) return;
-  const target = document.getElementById(WALKTHROUGH_TIPS[wtIndex].id);
+  const target = getTipTarget(WALKTHROUGH_TIPS[wtIndex]);
   if (!target) return;
   const tr = target.getBoundingClientRect();
-  const tt = wtTooltip.getBoundingClientRect();
   wtTooltip.style.left = (tr.left + tr.width / 2) + 'px';
   wtTooltip.style.top = (tr.bottom + 12) + 'px';
 }
@@ -847,9 +853,10 @@ function positionWtTooltip() {
 function showWtTip(index) {
   if (!wtTooltip || index >= WALKTHROUGH_TIPS.length) { finishWalkthrough(); return; }
   wtIndex = index;
-  WALKTHROUGH_TIPS.forEach((t) => document.getElementById(t.id)?.classList.remove('apl-wt-active'));
-  document.getElementById(WALKTHROUGH_TIPS[index].id)?.classList.add('apl-wt-active');
-  wtTooltip.querySelector('.apl-wt-text').textContent = WALKTHROUGH_TIPS[index].text;
+  WALKTHROUGH_TIPS.forEach((t) => { if (t.id) document.getElementById(t.id)?.classList.remove('apl-wt-active'); });
+  const tip = WALKTHROUGH_TIPS[index];
+  if (tip.id) document.getElementById(tip.id)?.classList.add('apl-wt-active');
+  wtTooltip.querySelector('.apl-wt-text').textContent = tip.text;
   wtTooltip.querySelector('.apl-wt-count').textContent = (index + 1) + ' / ' + WALKTHROUGH_TIPS.length;
   wtTooltip.querySelector('.apl-wt-next').textContent = index < WALKTHROUGH_TIPS.length - 1 ? 'Next →' : 'Done';
   wtTooltip.style.display = 'block';
@@ -858,7 +865,7 @@ function showWtTip(index) {
 
 function finishWalkthrough() {
   if (wtTooltip) { wtTooltip.remove(); wtTooltip = null; }
-  WALKTHROUGH_TIPS.forEach((t) => document.getElementById(t.id)?.classList.remove('apl-wt-active'));
+  WALKTHROUGH_TIPS.forEach((t) => { if (t.id) document.getElementById(t.id)?.classList.remove('apl-wt-active'); });
   chrome.storage.local.set({ [WALKTHROUGH_DONE_KEY]: true });
 }
 
