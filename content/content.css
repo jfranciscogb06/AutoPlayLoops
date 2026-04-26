@@ -567,6 +567,12 @@
 
 .apl-wt-next:hover { color: #f0b84d; }
 
+.apl-walkthrough-tooltip.apl-wt-corner-tr::before {
+  left: auto;
+  right: 20px;
+  transform: translateX(0) rotate(45deg);
+}
+
 .apl-tab .apl-wt-active {
   background: rgba(232, 168, 56, 0.25) !important;
   border-radius: 4px;

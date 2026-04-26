@@ -829,6 +829,7 @@ const WALKTHROUGH_TIPS = [
   { id: 'aplBarShuffle',  text: 'Shuffle your queue for a random order' },
   { id: 'aplBarDownload', text: 'One-click save — grab anything that hits' },
   { selector: 'input[name="q"]', text: 'Use Gmail search to filter your loops. Only emails matching the search will play' },
+  { corner: 'top-right',  text: 'Click the LoopMail icon up here to manage your account and subscription' },
 ];
 
 function getTipTarget(tip) {
@@ -843,7 +844,17 @@ let walkthroughAttempted = false;
 
 function positionWtTooltip() {
   if (!wtTooltip) return;
-  const target = getTipTarget(WALKTHROUGH_TIPS[wtIndex]);
+  const tip = WALKTHROUGH_TIPS[wtIndex];
+  if (tip.corner === 'top-right') {
+    wtTooltip.style.left = 'auto';
+    wtTooltip.style.right = '16px';
+    wtTooltip.style.top = '56px';
+    wtTooltip.style.transform = 'none';
+    return;
+  }
+  wtTooltip.style.right = '';
+  wtTooltip.style.transform = '';
+  const target = getTipTarget(tip);
   if (!target) return;
   const tr = target.getBoundingClientRect();
   wtTooltip.style.left = (tr.left + tr.width / 2) + 'px';
@@ -856,6 +867,7 @@ function showWtTip(index) {
   WALKTHROUGH_TIPS.forEach((t) => { if (t.id) document.getElementById(t.id)?.classList.remove('apl-wt-active'); });
   const tip = WALKTHROUGH_TIPS[index];
   if (tip.id) document.getElementById(tip.id)?.classList.add('apl-wt-active');
+  wtTooltip.classList.toggle('apl-wt-corner-tr', tip.corner === 'top-right');
   wtTooltip.querySelector('.apl-wt-text').textContent = tip.text;
   wtTooltip.querySelector('.apl-wt-count').textContent = (index + 1) + ' / ' + WALKTHROUGH_TIPS.length;
   wtTooltip.querySelector('.apl-wt-next').textContent = index < WALKTHROUGH_TIPS.length - 1 ? 'Next →' : 'Done';
