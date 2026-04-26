@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmHVjaFms8Ab59hCHamsyI9hKszw1qQ41W30iLC+3pg+w+kfQEfRSiP/NyFprn8rS8IbG7nQ8Y/wVuUavwRE3dSWxvoPWQWpjQ6hN9176GGwFIX+w9r2kWCk/FHkyGedZwrMO3c/enGDoKH/0oy0Q78U/KzBkAFQsXqTWL8zE0MF/V4dTyijT0BlATQqOMRBsnu6Iv7v6AplItGFKS9Wo4LSwxoLg9DjxQcFs65xDjktyxi+tTZlxK+HQnz4Sg0U8PuYaDeMAyoguP1+GdcGZuY75udJMj5+ZavNbYtkoJTyVMIWVDqFZv5WW10LWC4cTcW0csTlwtfqB5+BGrjSchwIDAQAB",
   "name": "LoopMail",
-  "version": "1.0.3",
+  "version": "1.0.6",
   "description": "Play audio loops from your Gmail inbox - 10 seconds each, perfect for music producers",
   "permissions": [
     "identity",
