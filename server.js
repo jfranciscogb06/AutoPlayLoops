@@ -393,7 +393,7 @@ app.post('/api/billing-portal', async (req, res) => {
     const portalConfig = (process.env.STRIPE_PORTAL_CONFIG_ID || '').trim();
     const session = await stripe.billingPortal.sessions.create({
       customer: customer.id,
-      return_url: getBaseUrl(),
+      return_url: `${getBaseUrl()}/auth/billing-return.html`,
       ...(portalConfig ? { configuration: portalConfig } : {}),
     });
     return res.status(200).json({ url: session.url });
