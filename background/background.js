@@ -1042,7 +1042,7 @@ chrome.runtime.onMessageExternal.addListener((msg, sender) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url?.startsWith('https://getloopmail.com/auth/billing-return')) {
-    chrome.tabs.remove(tabId);
+    setTimeout(() => chrome.tabs.remove(tabId), 2000);
   }
 });
 
