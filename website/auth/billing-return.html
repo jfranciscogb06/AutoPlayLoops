@@ -45,5 +45,12 @@
   <img src="../assets/icon128.png" alt="" class="icon" width="64" height="64">
   <h1>You're all set</h1>
   <p>Taking you back to LoopMail...</p>
+  <script>
+    setTimeout(() => {
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        chrome.runtime.sendMessage('lpjcmlggiglipgioddofmpicipnbbkoe', { type: 'BILLING_CLOSE' });
+      }
+    }, 2000);
+  </script>
 </body>
 </html>
